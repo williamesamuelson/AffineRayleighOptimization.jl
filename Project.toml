@@ -3,6 +3,12 @@ uuid = "afc0e0ae-cd0a-41ee-b0f5-7950de095d62"
 authors = ["William Samuelson <william.samuelson@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
+
 [compat]
 julia = "1.6.7"
 
