@@ -1,11 +1,12 @@
 module AffineRayleighOptimization
 using LinearAlgebra
-using LinearSolve
-import SciMLBase: solve
+import SciMLBase: solve, init, solve!
 using TestItems
 
 export RayleighQuotient, QuadraticForm
 export ConstrainedRayleighQuotientProblem, ConstrainedQuadraticFormProblem
+export QF_BACKSLASH, QF_LINEARSOLVE
+
 export solve
 
 include("quadratic_form.jl")

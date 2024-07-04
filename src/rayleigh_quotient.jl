@@ -86,7 +86,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
     b = prob.b
     C = prob.C
     Kb = I - b * b' / dot(b, b)
-    nlargest = partialsortperm(norm.(eachrow(b)), 1:size(b, 2), rev=true)
+    nlargest = partialsortperm(eachrow(b), 1:size(b, 2); by=norm, rev=true)
     N = size(b, 1)
     inds = map(!in(nlargest), 1:N)
     J = I(N)[inds, :]
