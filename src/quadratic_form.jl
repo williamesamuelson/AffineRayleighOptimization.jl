@@ -1,7 +1,7 @@
 """
     QuadraticForm(quadratic_form)
 
-Create a quadratic form representation.
+Quadratic form representation.
 """
 struct QuadraticForm{Q}
     quadratic_form::Q

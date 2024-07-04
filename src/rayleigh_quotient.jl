@@ -1,7 +1,7 @@
 """
     RayleighQuotient(q)
 
-Create a Rayleigh quotient representation.
+Rayleigh quotient representation.
 """
 struct RayleighQuotient{Q}
     quadratic_form::Q
