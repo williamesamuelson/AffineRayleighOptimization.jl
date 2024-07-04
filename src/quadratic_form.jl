@@ -47,13 +47,13 @@ function solve(prob::ConstrainedQuadraticFormProblem, alg=KrylovJL_MINRES())
     return inv_penalty_mat * original_lhs_mat' * intermediate_sol
 end
 
-#=@testitem "QuadraticFormProblem" begin=#
-#=    using LinearAlgebra, Random=#
-#=    Random.seed!(1234)=#
-#=    Q = Diagonal(1:10)=#
-#=    C = I=#
-#=    b = rand(10)=#
-#=    prob = WeakMajoranas.ConstrainedQuadraticFormProblem(Q, C, b)=#
-#=    sol = solve(prob)=#
-#=    @test sol ≈ b=#
-#=end=#
+@testitem "QuadraticFormProblem" begin
+    using LinearAlgebra, Random
+    Random.seed!(1234)
+    Q = Diagonal(1:10)
+    C = I
+    b = rand(10)
+    prob = ConstrainedQuadraticFormProblem(Q, C, b)
+    sol = solve(prob)
+    @test sol ≈ b
+end
