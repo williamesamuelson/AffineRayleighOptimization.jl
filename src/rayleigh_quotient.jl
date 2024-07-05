@@ -90,9 +90,8 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
     C = prob.C
     N = size(b, 1)
     Kb = I - b * b' / dot(b, b)
-    _, inds_keep = _inds_to_keep_and_remove(b, N)
-    J = I(N)[inds_keep, :]
-    augC = J * Kb * C
+    _, inds_keep = _inds_to_remove_and_keep(b, N)
+    augC = (Kb * C)[inds_keep, :] # instead of J * Kb * C where J = I(N)[inds_keep, :]
     return _solve_homo_prob_and_normalize(augC, prob, alg)
 end
 
@@ -100,15 +99,14 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE)
     b = prob.b
     C = prob.C
     N = size(b, 1)
-    inds_remove, inds_keep = _inds_to_keep_and_remove(b, N)
-    J = sparse(I(N))[inds_keep, :]
-    bk = first(b[inds_remove]) # only one element, but it seems like we can have b a matrix?
-    Ck = C[inds_remove, 1:N]
-    augC = J * (C - (1/bk) * b * Ck)
+    inds_remove, inds_keep = _inds_to_remove_and_keep(b, N)
+    bk = first(b[inds_remove]) # only one element, add support for b matrix?
+    Ck = C[inds_remove, :]
+    augC = (C - (1/bk) * b * Ck)[inds_keep, :] # replace mult by J with slicing, see above
     return _solve_homo_prob_and_normalize(augC, prob, alg)
 end
 
-function _inds_to_keep_and_remove(b, N)
+function _inds_to_remove_and_keep(b, N)
     inds_remove = partialsortperm(eachrow(b), 1:size(b, 2); by=norm, rev=true)
     inds_keep = map(!in(inds_remove), 1:N)
     return inds_remove, inds_keep
