@@ -101,7 +101,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE)
     C = prob.C
     N = size(b, 1)
     inds_remove, inds_keep = _inds_to_keep_and_remove(b, N)
-    J = I(N)[inds_keep, :]
+    J = sparse(I(N))[inds_keep, :]
     bk = first(b[inds_remove]) # only one element, but it seems like we can have b a matrix?
     Ck = C[inds_remove, 1:N]
     augC = J * (C - (1/bk) * b * Ck)
