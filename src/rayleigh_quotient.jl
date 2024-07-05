@@ -156,22 +156,22 @@ end
 @testitem "RayleighQuotientProblem" begin
     using LinearAlgebra, Random
     import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG, RQ_SPARSE
+    function test_prob(prob, known_sol)
+        for solver in [RQ_EIG(), RQ_SPARSE(), RQ_CHOL(), RQ_GENEIG()]
+            sol = solve(prob, solver)
+            @test sol ≈ known_sol
+        end
+    end
     Random.seed!(1234)
     Q = Diagonal(1:10)
     rc = RayleighQuotient(Q)
     @test rc(ones(10)) ≈ sum(Q) / norm(ones(10))^2
-    C = I
+    C = I(10)
     b = rand(10)
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
-    for solver in [RQ_EIG(), RQ_SPARSE(), RQ_CHOL(), RQ_GENEIG()]
-        sol = solve(prob, solver)
-        @test sol ≈ b
-    end
+    test_prob(prob, b)
     C = ones(1, 10)
     b = [1.0]
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
-    sol = solve(prob)
-    @test sol ≈ [1.0, zeros(9)...]
-    sol2 = solve(prob, RQ_CHOL())
-    @test sol ≈ sol2
+    test_prob(prob, [1.0, zeros(9)...])
 end
