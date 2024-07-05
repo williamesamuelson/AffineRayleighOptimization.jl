@@ -53,6 +53,9 @@ end
 @kwdef struct RQ_HOMO{T} <: RQ_ALG
     eps::T = DEFAULT_SELECTVEC_EPS
 end
+@kwdef struct RQ_SPARSE{T} <: RQ_ALG
+    eps::T = DEFAULT_SELECTVEC_EPS
+end
 
 solve(prob::ConstrainedRayleighQuotientProblem) = solve(prob, RQ_GENEIG())
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
@@ -85,12 +88,35 @@ end
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
     b = prob.b
     C = prob.C
-    Kb = I - b * b' / dot(b, b)
-    nlargest = partialsortperm(eachrow(b), 1:size(b, 2); by=norm, rev=true)
     N = size(b, 1)
-    inds = map(!in(nlargest), 1:N)
-    J = I(N)[inds, :]
+    Kb = I - b * b' / dot(b, b)
+    _, inds_keep = _inds_to_keep_and_remove(b, N)
+    J = I(N)[inds_keep, :]
     augC = J * Kb * C
+    return _solve_homo_prob_and_normalize(augC, prob, alg)
+end
+
+function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE)
+    b = prob.b
+    C = prob.C
+    N = size(b, 1)
+    inds_remove, inds_keep = _inds_to_keep_and_remove(b, N)
+    J = I(N)[inds_keep, :]
+    bk = first(b[inds_remove]) # only one element, but it seems like we can have b a matrix?
+    Ck = C[inds_remove, 1:N]
+    augC = J * (C - (1/bk) * b * Ck)
+    return _solve_homo_prob_and_normalize(augC, prob, alg)
+end
+
+function _inds_to_keep_and_remove(b, N)
+    inds_remove = partialsortperm(eachrow(b), 1:size(b, 2); by=norm, rev=true)
+    inds_keep = map(!in(inds_remove), 1:N)
+    return inds_remove, inds_keep
+end
+
+function _solve_homo_prob_and_normalize(augC, prob, alg)
+    b = prob.b
+    C = prob.C
     homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
     sol = solve(homo_prob, RQ_HOMO(alg.eps))
     z = dot(b, C, sol) / dot(b, b)
@@ -129,7 +155,7 @@ end
 ## Tests
 @testitem "RayleighQuotientProblem" begin
     using LinearAlgebra, Random
-    import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG
+    import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG, RQ_SPARSE
     Random.seed!(1234)
     Q = Diagonal(1:10)
     rc = RayleighQuotient(Q)
@@ -137,11 +163,10 @@ end
     C = I
     b = rand(10)
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
-    for solver in [RQ_EIG(), RQ_CHOL(), RQ_GENEIG()]
+    for solver in [RQ_EIG(), RQ_SPARSE(), RQ_CHOL(), RQ_GENEIG()]
         sol = solve(prob, solver)
         @test sol ≈ b
     end
-
     C = ones(1, 10)
     b = [1.0]
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
