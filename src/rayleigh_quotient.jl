@@ -54,6 +54,16 @@ The vectors are provided as the columns in vecs.
 struct Span{V<:AbstractMatrix}
     vecs::V
 end
+Span(v::AbstractVector) = Span(hcat(v))
+Span(itr...) = Span(reduce(hcat, itr))
+@testitem "Span" begin
+    b1 = rand(2)
+    b2 = rand(2)
+    bspan = Span(b1, b2)
+    bmatspan = Span(hcat(b1, b2))
+    @test bspan.vecs == bmatspan.vecs
+    @test Span(b1).vecs[:] == b1
+end
 
 _get_b(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q, Cmat} = prob.b
 _get_b(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}) where {Q, Cmat} = prob.b.vecs
