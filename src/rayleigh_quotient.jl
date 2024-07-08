@@ -34,14 +34,14 @@ b can also be given as a span, using the Span struct.
 """
 struct ConstrainedRayleighQuotientProblem{Q,Cmat,B}
     Q::RayleighQuotient{Q}
-    Cmat::Cmat
+    C::Cmat
     b::B
-    function ConstrainedRayleighQuotientProblem(q::Q, c::Cmat, b::B) where {Q,Cmat,B}
+    function ConstrainedRayleighQuotientProblem(q::Q, C::Cmat, b::B) where {Q,Cmat,B}
         rq = RayleighQuotient(q)
-        return new{rq_type(rq),Cmat,B}(rq, c, b)
+        return new{rq_type(rq),Cmat,B}(rq, C, b)
     end
-    function ConstrainedRayleighQuotientProblem(q::RayleighQuotient{Q}, c::Cmat, b::B) where {Q,Cmat,B}
-        return new{Q,Cmat,B}(RayleighQuotient(q), c, b)
+    function ConstrainedRayleighQuotientProblem(q::RayleighQuotient{Q}, C::Cmat, b::B) where {Q,Cmat,B}
+        return new{Q,Cmat,B}(RayleighQuotient(q), C, b)
     end
 end
 
@@ -79,7 +79,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::SPA
     error("$alg is incompatible with b a Span. Use RQ_EIG() instead.")
 end
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
-    augC = hcat(prob.Cmat, -prob.b)
+    augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
     Nv = N[end, :]
@@ -91,7 +91,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
 end
 
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_CHOL)
-    augC = hcat(prob.Cmat, -prob.b)
+    augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
     Nv = N[end, :]
@@ -107,7 +107,7 @@ end
 #https://www.cis.upenn.edu/~jshi/papers/supplement_nips2006.pdf
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
     b = _get_b(prob) # fetch b matrix/vector if prob.b is span/vector
-    C = prob.Cmat
+    C = prob.C
     N = size(b, 1)
     Kb = I - b * b' / dot(b, b)
     _, inds_keep = _inds_to_remove_and_keep(b, N)
@@ -117,7 +117,7 @@ end
 
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE)
     b = _get_b(prob)
-    C = prob.Cmat
+    C = prob.C
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
     bk = first(b[inds_remove]) # only one element, no support for b Span
     Ck = C[inds_remove, :]
@@ -133,7 +133,7 @@ end
 
 function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem, alg)
     b = _get_b(prob)
-    C = prob.Cmat
+    C = prob.C
     homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
     sol = solve(homo_prob, RQ_HOMO(alg.eps))
     t = dot(b, C, sol) / dot(b, b)
@@ -148,7 +148,7 @@ end
 
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
     @assert iszero(prob.b) "b must be zero"
-    C = prob.Cmat
+    C = prob.C
     P = I - C' * (factorize(Hermitian(C * C')) \ C)
     eig = eigen(Hermitian(P' * prob.Q.quadratic_form * P))
     _select_vectors(eig.vectors, P, alg.eps)
@@ -166,11 +166,19 @@ end
 @testitem "RayleighQuotientProblem" begin
     using LinearAlgebra, Random
     import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG, RQ_SPARSE
-    function test_prob(prob, known_sol, solvers=[RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()])
+    function test_prob_known_sol(prob, known_sol, solvers=[RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()])
         for solver in solvers
             sol = solve(prob, solver)
             @test sol ≈ known_sol
         end
+    end
+    function test_prob(prob, solvers=[RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()])
+        sols = []
+        for solver in solvers
+            sol = solve(prob, solver)
+            push!(sols, sol)
+        end
+        @test all(x->x ≈ first(sols), sols[2:end])
     end
     Random.seed!(1234)
     #prob 1 (sol=b)
@@ -180,19 +188,27 @@ end
     C = I(10)
     b = rand(10)
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
-    test_prob(prob, b)
+    test_prob_known_sol(prob, b)
     #prob 2 (span)
     b1 = [0.0, 2.0, zeros(8)...]
     b2 = [0.0, 0.0, 1.0, zeros(7)...]
     bspan = hcat(b1, b2)
     prob = ConstrainedRayleighQuotientProblem(rc, C, Span(bspan))
-    test_prob(prob, b1/2, [RQ_EIG()])
+    test_prob_known_sol(prob, b1/2, [RQ_EIG()])
     bspan = hcat(b2, b1) # change order
     prob = ConstrainedRayleighQuotientProblem(rc, C, Span(bspan))
-    test_prob(prob, b1/2, [RQ_EIG()])
+    test_prob_known_sol(prob, b1/2, [RQ_EIG()])
     #prob 3
     C = ones(1, 10)
     b = [1.0]
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
-    test_prob(prob, [1.0, zeros(9)...])
+    test_prob_known_sol(prob, [1.0, zeros(9)...])
+    #prob 4
+    n = 20
+    k = 10
+    rc = RayleighQuotient(Hermitian(rand(n, n)))
+    C = rand(k, n)
+    b = rand(k)
+    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    test_prob(prob)
 end
