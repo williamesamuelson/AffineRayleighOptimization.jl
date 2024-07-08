@@ -4,7 +4,7 @@ import SciMLBase: solve, init, solve!
 using TestItems
 
 export RayleighQuotient, QuadraticForm
-export ConstrainedRayleighQuotientProblem, ConstrainedQuadraticFormProblem
+export ConstrainedRayleighQuotientProblem, ConstrainedQuadraticFormProblem, Span
 export QF_BACKSLASH, QF_LINEARSOLVE
 
 export solve
