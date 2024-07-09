@@ -24,10 +24,10 @@ rq_type(::RayleighQuotient{Q}) where {Q} = Q
 end
 
 """
-    ConstrainedRayleighQuotientProblem(Q, C, b)
+    ConstrainedRayleighQuotientProblem(Q, C, b; maximize)
 
 A constrained quadratic form problem of the form
-    minimize `dot(x,Qx)/dot(x,x)`
+    maximize/minimize `dot(x,Qx)/dot(x,x)`
     subject to `Cx = b`.
 
 b can also be given as a span, using the Span struct.
@@ -36,12 +36,13 @@ struct ConstrainedRayleighQuotientProblem{Q,Cmat,B}
     Q::RayleighQuotient{Q}
     C::Cmat
     b::B
-    function ConstrainedRayleighQuotientProblem(q::Q, C::Cmat, b::B) where {Q,Cmat,B}
+    maximize::Bool
+    function ConstrainedRayleighQuotientProblem(q::Q, C::Cmat, b::B; maximize::Bool) where {Q,Cmat,B}
         rq = RayleighQuotient(q)
-        return new{rq_type(rq),Cmat,B}(rq, C, b)
+        return new{rq_type(rq),Cmat,B}(rq, C, b, maximize)
     end
-    function ConstrainedRayleighQuotientProblem(q::RayleighQuotient{Q}, C::Cmat, b::B) where {Q,Cmat,B}
-        return new{Q,Cmat,B}(RayleighQuotient(q), C, b)
+    function ConstrainedRayleighQuotientProblem(q::RayleighQuotient{Q}, C::Cmat, b::B; maximize::Bool) where {Q,Cmat,B}
+        return new{Q,Cmat,B}(RayleighQuotient(q), C, b, maximize)
     end
 end
 
@@ -95,7 +96,8 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
     Nv = N[end, :]
     new_quadratic_form = Hermitian(Ntrunc' * prob.Q.quadratic_form * Ntrunc)
     rhs_gen_eigen = Hermitian(Ntrunc' * Ntrunc)
-    eigsol = eigen(new_quadratic_form, rhs_gen_eigen).vectors[:, 1] # smallest eigenvalue eigenvector minimizes
+    #=eigsol = eigen(new_quadratic_form, rhs_gen_eigen).vectors[:, 1] # smallest eigenvalue eigenvector minimizes=#
+    eigsol = _solve_eigen(new_quadratic_form, rhs_gen_eigen, prob, alg)
     unnormalized_sol = Ntrunc * eigsol
     return unnormalized_sol / dot(Nv, eigsol)
 end
@@ -108,7 +110,8 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_CHOL)
     upper = cholesky(Ntrunc' * Ntrunc).U
     inv_upper = inv(upper)
     new_quadratic_form = Hermitian(inv_upper' * Ntrunc' * prob.Q.quadratic_form * Ntrunc * inv_upper)
-    eigsol = eigen(new_quadratic_form, 1:1).vectors[:, 1]
+    #=eigsol = eigen(new_quadratic_form, 1:1).vectors[:, 1]=#
+    eigsol = _solve_eigen(new_quadratic_form, prob, alg)
     unnormalized_sol = Ntrunc * inv_upper * eigsol
     return unnormalized_sol / dot(Nv, inv_upper * eigsol)
 end
@@ -144,7 +147,7 @@ end
 function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem, alg)
     b = _get_b(prob)
     C = prob.C
-    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
+    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b); maximize=prob.maximize)
     sol = solve(homo_prob, RQ_HOMO(alg.eps))
     t = dot(b, C, sol) / dot(b, b)
     return sol / t
@@ -152,7 +155,7 @@ end
 
 function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span} , alg) where {Q,Cmat}
     b = _get_b(prob)[:, 1] # for b Span, normalization is not specified
-    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
+    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b); maximize=prob.maximize)
     return solve(homo_prob, RQ_HOMO(alg.eps)) # returns a view, is that ok?
 end
 
@@ -160,12 +163,37 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
     @assert iszero(prob.b) "b must be zero"
     C = prob.C
     P = I - C' * (factorize(Hermitian(C * C')) \ C)
-    eig = eigen(Hermitian(P' * prob.Q.quadratic_form * P))
-    _select_vector(eig, alg.eps)
+    mat = Hermitian(P' * prob.Q.quadratic_form * P)
+    _solve_eigen(mat, prob, alg)
 end
 
-function _select_vector(eig, eps=DEFAULT_SELECTVEC_EPS)
-    ind = findfirst(>(eps), eig.values)
+function _solve_eigen(mat, prob, alg)
+    n = size(mat, 1)
+    if prob.maximize
+        eig = eigen(mat, n:n)
+        return eig.vectors[:, 1]
+    else
+        return _solve_eigen_minimize(mat, alg)
+    end
+end
+
+function _solve_eigen(matlhs, matrhs, prob, alg::RQ_GENEIG)
+    eig = eigen(matlhs, matrhs)
+    if prob.maximize
+        return eig.vectors[:, end]
+    else
+        return eig.vectors[:, 1]
+    end
+end
+
+function _solve_eigen_minimize(mat, alg)
+    eig = eigen(mat, 1:1)
+    return eig.vectors[:, 1]
+end
+
+function _solve_eigen_minimize(mat, alg::RQ_HOMO)
+    eig = eigen(mat)
+    ind = findfirst(>(alg.eps), eig.values)
     return eig.vectors[:, ind]
 end
 
@@ -203,20 +231,22 @@ end
     @test rc(ones(10)) ≈ sum(Q) / norm(ones(10))^2
     C = I(10)
     b = rand(10)
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    prob = ConstrainedRayleighQuotientProblem(rc, C, b; maximize=false)
     test_prob_known_sol(prob, b)
     #prob 2 (span)
     b1 = [0.0, 2.0, zeros(8)...]
     b2 = [0.0, 0.0, 1.0, zeros(7)...]
-    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b1, b2))
+    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b1, b2); maximize=false)
     test_prob_known_sol(prob, b1/2, [RQ_EIG()])
-    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b2, b1)) # change order
+    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b2, b1); maximize=false) # change order
     test_prob_known_sol(prob, b1/2, [RQ_EIG()])
-    #prob 3
+    #prob 3 (maximize and minimize)
     C = ones(1, 10)
     b = [1.0]
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    prob = ConstrainedRayleighQuotientProblem(rc, C, b; maximize=false)
     test_prob_known_sol(prob, [1.0, zeros(9)...])
+    prob = ConstrainedRayleighQuotientProblem(rc, C, b; maximize=true)
+    test_prob_known_sol(prob, [zeros(9)..., 1.0])
     #prob 4
     n = 20
     k = 10
@@ -225,6 +255,8 @@ end
     rc = RayleighQuotient(Q)
     C = rand(k, n)
     b = rand(k)
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    prob = ConstrainedRayleighQuotientProblem(rc, C, b; maximize=false)
+    test_prob(prob)
+    prob = ConstrainedRayleighQuotientProblem(rc, C, b; maximize=true)
     test_prob(prob)
 end
