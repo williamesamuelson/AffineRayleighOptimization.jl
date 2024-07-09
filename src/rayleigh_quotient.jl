@@ -216,10 +216,7 @@ end
     #prob 4
     n = 20
     k = 10
-    # generate random symmetric positive definite matrix
-    M = Hermitian(rand(n, n))
-    Q = M * M'
-    rc = RayleighQuotient(Q)
+    rc = RayleighQuotient(Hermitian(rand(n, n)))
     C = rand(k, n)
     b = rand(k)
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
