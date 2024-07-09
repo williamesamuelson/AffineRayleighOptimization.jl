@@ -71,7 +71,7 @@ _get_b(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}) where {Q, Cmat} 
 abstract type RQ_ALG end
 struct RQ_CHOL <: RQ_ALG end
 struct RQ_GENEIG <: RQ_ALG end
-const DEFAULT_SELECTVEC_EPS = 1e-15
+const DEFAULT_SELECTVEC_EPS = 1e-14
 @kwdef struct RQ_EIG{T} <: RQ_ALG
     eps::T = DEFAULT_SELECTVEC_EPS
 end
@@ -95,7 +95,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
     Nv = N[end, :]
     new_quadratic_form = Hermitian(Ntrunc' * prob.Q.quadratic_form * Ntrunc)
     rhs_gen_eigen = Hermitian(Ntrunc' * Ntrunc)
-    eigsol = eigen(new_quadratic_form, rhs_gen_eigen).vectors[:, 1] # smallest eigenvalue eigenvector maximizes
+    eigsol = eigen(new_quadratic_form, rhs_gen_eigen).vectors[:, 1] # smallest eigenvalue eigenvector minimizes
     unnormalized_sol = Ntrunc * eigsol
     return unnormalized_sol / dot(Nv, eigsol)
 end
@@ -161,28 +161,34 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
     C = prob.C
     P = I - C' * (factorize(Hermitian(C * C')) \ C)
     eig = eigen(Hermitian(P' * prob.Q.quadratic_form * P))
-    _select_vectors(eig.vectors, P, alg.eps)
+    _select_vector(eig, alg.eps)
 end
 
-function _select_vectors(eigvecs, P, eps=DEFAULT_SELECTVEC_EPS)
-    vecs = eachcol(eigvecs)
-    v = similar(first(vecs))
-    f = x -> any(>(eps) ∘ abs, mul!(v, P, x))
-    i1 = findfirst(f, vecs)
-    return vecs[i1]
+function _select_vector(eig, eps=DEFAULT_SELECTVEC_EPS)
+    ind = findfirst(>(eps), eig.values)
+    return eig.vectors[:, ind]
 end
+
+#=function _select_vector(eigvecs, P, eps=DEFAULT_SELECTVEC_EPS)=#
+#=    vecs = eachcol(eigvecs)=#
+#=    v = similar(first(vecs))=#
+#=    f = x -> any(>(eps) ∘ abs, mul!(v, P, x))=#
+#=    i1 = findfirst(f, vecs)=#
+#=    return vecs[i1]=#
+#=end=#
 
 ## Tests
 @testitem "RayleighQuotientProblem" begin
     using LinearAlgebra, Random
     import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG, RQ_SPARSE
-    function test_prob_known_sol(prob, known_sol, solvers=[RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()])
+    all_solvers = [RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()]
+    function test_prob_known_sol(prob, known_sol, solvers=all_solvers)
         for solver in solvers
             sol = solve(prob, solver)
             @test sol ≈ known_sol
         end
     end
-    function test_prob(prob, solvers=[RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()])
+    function test_prob(prob, solvers=all_solvers)
         sols = []
         for solver in solvers
             sol = solve(prob, solver)
@@ -202,11 +208,9 @@ end
     #prob 2 (span)
     b1 = [0.0, 2.0, zeros(8)...]
     b2 = [0.0, 0.0, 1.0, zeros(7)...]
-    bspan = hcat(b1, b2)
-    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(bspan))
+    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b1, b2))
     test_prob_known_sol(prob, b1/2, [RQ_EIG()])
-    bspan = hcat(b2, b1) # change order
-    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(bspan))
+    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b2, b1)) # change order
     test_prob_known_sol(prob, b1/2, [RQ_EIG()])
     #prob 3
     C = ones(1, 10)
@@ -216,8 +220,7 @@ end
     #prob 4
     n = 20
     k = 10
-    # generate random symmetric positive definite matrix
-    M = Hermitian(rand(n, n))
+    M = Hermitian(rand(n, n)) # generate random symmetric positive definite matrix
     Q = M * M'
     rc = RayleighQuotient(Q)
     C = rand(k, n)
