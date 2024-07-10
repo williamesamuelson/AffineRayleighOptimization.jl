@@ -159,17 +159,20 @@ end
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
     @assert iszero(prob.b) "b must be zero"
     C = prob.C
-    P = I - C' * (factorize(Hermitian(C * C')) \ C)
-    eig = eigen(Hermitian(P' * prob.Q.quadratic_form * P))
-    _select_vector(eig.vectors, P, alg.eps)
+    P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C
+    PQP = P' * prob.Q.quadratic_form * P
+    howmany = 1
+    _, eigvecs, info = eigsolve(PQP, size(C, 2), howmany, :SR; ishermitian=true)
+    ind = _select_vector_index(eigvecs, P)
+    !isnothing(ind) && return eigvecs[ind] # if an ok vector is found, return it, otherwise, look for more
+    howmany = size(C, 1) + 1 # this is often too large, 2 works if krylov doesn't resolve the 0 eigenvalues
+    _, eigvecs, info = eigsolve(PQP, first(eigvecs), howmany, :SR; ishermitian=true)
+    return eigvecs[_select_vector_index(eigvecs, P)]
 end
 
-function _select_vector(eigvecs, P, eps=DEFAULT_SELECTVEC_EPS)
-    vecs = eachcol(eigvecs)
-    v = similar(first(vecs))
+function _select_vector_index(eigvecs, P)
     f = x -> dot(x, P, x) > 1/2
-    i1 = findfirst(f, vecs)
-    return vecs[i1]
+    return findfirst(f, eigvecs)
 end
 
 ## Tests
@@ -180,7 +183,11 @@ end
     function test_prob_known_sol(prob, known_sol, solvers=all_solvers)
         for solver in solvers
             sol = solve(prob, solver)
-            @test sol ≈ known_sol
+            if isa(prob.b, Span)
+                @test (sol ≈ known_sol) || (sol ≈ -known_sol) # sign undetermined if b Span?
+            else
+                @test sol ≈ known_sol
+            end
         end
     end
     function test_prob(prob, solvers=all_solvers)
@@ -212,7 +219,7 @@ end
     b = [1.0]
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
     test_prob_known_sol(prob, [1.0, zeros(9)...])
-    #prob 4
+    #prob 4 (random matrix)
     n = 20
     k = 10
     rc = RayleighQuotient(Hermitian(rand(n, n)))

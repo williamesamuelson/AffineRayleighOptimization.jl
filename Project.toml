@@ -4,7 +4,9 @@ authors = ["William Samuelson <william.samuelson@gmail.com> and contributors"]
 version = "1.1.0-DEV"
 
 [deps]
+KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 
@@ -16,13 +18,13 @@ AffineRayleighOptimizationLinearSolveExt = "LinearSolve"
 
 [compat]
 LinearAlgebra = "1"
+LinearSolve = "2"
+Random = "1"
 SciMLBase = "2"
+Test = "1"
+TestItemRunner = "0.2"
 TestItems = "0.1"
 julia = "1.9"
-LinearSolve = "2"
-TestItemRunner = "0.2"
-Test = "1"
-Random = "1"
 
 [extras]
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
