@@ -116,23 +116,31 @@ end
 
 #https://www.cis.upenn.edu/~jshi/papers/supplement_nips2006.pdf
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
+    C_reduced = _get_C_reduced(prob, alg)
+    return _solve_homo_prob(C_reduced, prob, alg)
+end
+# can't combine because of ambiguous methods...
+function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_SPARSE) where {Q,Cmat}
+    C_reduced = _get_C_reduced(prob, alg)
+    return _solve_homo_prob(C_reduced, prob, alg)
+end
+
+function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
     b = _get_b(prob) # fetch b matrix/vector if prob.b is span/vector
     C = prob.C
     N = size(b, 1)
     Kb = I - b * b' / dot(b, b)
     _, inds_keep = _inds_to_remove_and_keep(b, N)
-    augC = (Kb * C)[inds_keep, :] # instead of J * Kb * C where J = I(N)[inds_keep, :]
-    return _solve_homo_prob(augC, prob, alg)
+    return (Kb * C)[inds_keep, :] # instead of J * Kb * C where J = I(N)[inds_keep, :]
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_SPARSE) where {Q,Cmat}
+function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE)
     b = _get_b(prob)
     C = prob.C
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
     bk = first(b[inds_remove]) # only one element, no support for b Span
     Ck = C[inds_remove, :]
-    augC = (C - (1/bk) * b * Ck)[inds_keep, :] # replace mult by J with slicing, see above
-    return _solve_homo_prob(augC, prob, alg)
+    return (C - (1/bk) * b * Ck)[inds_keep, :] # replace mult by J with slicing, see above
 end
 
 function _inds_to_remove_and_keep(b, N)
@@ -141,10 +149,10 @@ function _inds_to_remove_and_keep(b, N)
     return inds_remove, inds_keep
 end
 
-function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem, alg)
+function _solve_homo_prob(C_reduced, prob::ConstrainedRayleighQuotientProblem, alg)
     b = _get_b(prob)
     C = prob.C
-    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
+    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, C_reduced, zero(b))
     sol = solve(homo_prob, RQ_HOMO(alg.eps))
     t = dot(b, C, sol) / dot(b, b)
     return sol / t
@@ -159,15 +167,19 @@ end
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
     @assert iszero(prob.b) "b must be zero"
     C = prob.C
-    P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C
-    PQP = P' * prob.Q.quadratic_form * P
+    P, PQP = _get_P_PQP_homo(C, prob.Q.quadratic_form)
     howmany = 1
     _, eigvecs, info = eigsolve(PQP, size(C, 2), howmany, :SR; ishermitian=true)
     ind = _select_vector_index(eigvecs, P)
     !isnothing(ind) && return eigvecs[ind] # if an ok vector is found, return it, otherwise, look for more
-    howmany = size(C, 1) + 1 # this is often too large, 2 works if krylov doesn't resolve the 0 eigenvalues
+    howmany = size(C, 1) + 1 # this is often too large
     _, eigvecs, info = eigsolve(PQP, first(eigvecs), howmany, :SR; ishermitian=true)
     return eigvecs[_select_vector_index(eigvecs, P)]
+end
+
+function _get_P_PQP_homo(C, Q)
+    P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C
+    return P, P' * Q * P
 end
 
 function _select_vector_index(eigvecs, P)
