@@ -100,7 +100,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
     return unnormalized_sol / dot(Nv, eigsol)
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_CHOL)
+function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_CHOL) where {Q,Cmat}
     augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
@@ -112,7 +112,6 @@ function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_CHOL)
     unnormalized_sol = Ntrunc * inv_upper * eigsol
     return unnormalized_sol / dot(Nv, inv_upper * eigsol)
 end
-
 
 #https://www.cis.upenn.edu/~jshi/papers/supplement_nips2006.pdf
 function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
@@ -164,7 +163,7 @@ function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem{Q,Cmat,
     return solve(homo_prob, RQ_HOMO(alg.eps)) # returns a view, is that ok?
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
+function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_HOMO) where {Q,Cmat}
     @assert iszero(prob.b) "b must be zero"
     C = prob.C
     P, PQP = _get_P_PQP_homo(C, prob.Q.quadratic_form)

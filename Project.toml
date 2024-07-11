@@ -19,6 +19,8 @@ AffineRayleighOptimizationLinearSolveExt = "LinearSolve"
 [compat]
 LinearAlgebra = "1"
 LinearSolve = "2"
+KrylovKit = "0.8"
+LinearMaps = "3"
 Random = "1"
 SciMLBase = "2"
 Test = "1"
