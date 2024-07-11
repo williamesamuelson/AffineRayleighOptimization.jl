@@ -1,0 +1,2 @@
+using Aqua, AffineRayleighOptimization
+Aqua.test_all(AffineRayleighOptimization)
