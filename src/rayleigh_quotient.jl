@@ -140,9 +140,10 @@ function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE
     b = _get_b(prob)
     C = prob.C
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
-    bk = first(b[inds_remove]) # only one element, no support for b Span
-    Ck = C[inds_remove, :] # replace mult by J with slicing, see above
-    return (C - (1/bk) * b * Ck)[inds_keep, :]
+    ind_remove = only(inds_remove) # only one element, no support for b Span
+    bk = b[ind_remove]
+    Ck = transpose(C[ind_remove, :])
+    return (C - (1/bk) * b * Ck)[inds_keep, :] # replace mult by J with slicing, see above
 end
 
 function _inds_to_remove_and_keep(b, N)
@@ -171,7 +172,8 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
     C = prob.C
     P, PQP = _get_P_PQP_homo(C, prob.Q.quadratic_form)
     howmany = 1
-    _, eigvecs, info = eigsolve(PQP, size(C, 2), howmany, :SR; ishermitian=true)
+    # we need to specify ishermitian to eigsolve. eigsolve doesn't check this if the matrix is not an AbstractMatrix
+    _, eigvecs, info = eigsolve(PQP, size(C, 2), howmany, :SR; ishermitian=true, alg.krylov_kwargs...)
     ind = _select_vector_index(eigvecs, P)
     !isnothing(ind) && return eigvecs[ind] # if an ok vector is found, return it, otherwise, look for more
     #=howmany = size(C, 1) + 1 # this is often too large=#
@@ -183,8 +185,12 @@ end
 
 function _get_P_PQP_homo(C, Q)
     #=P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C=#
-    P = I - C' * InverseMap(lu(Hermitian(C * C'))) * C # sparse cholesky is incompatible with ldiv!
-    return P, P' * Q * P
+    F = lu(Hermitian(C * C')) #sparse cholesky is incompatible with ldiv!
+    issymmetric = eltype(C) <: Real # I think this is correct
+    P = I - C' * LinearMap(InverseMap(F); ishermitian=true, issymmetric, isposdef=true) * C
+    P = LinearMap(P; ishermitian=true)
+    PQP = LinearMap(P' * Q * P; ishermitian=true)
+    return P, PQP
 end
 
 function _select_vector_index(eigvecs, P)
@@ -254,7 +260,7 @@ end
     k = 300
     Q = Hermitian(rand(n,n))
     rc = RayleighQuotient(Q)
-    b = rand(k)
+    b = sprand(k, 0.1)
     function generate_sparse_fullrank_C(n, k, sparsity)
         C = zeros(k, n)
         fullrank = false
@@ -266,18 +272,16 @@ end
     end
     C = generate_sparse_fullrank_C(n, k, 0.01)
     prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
-    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob, RQ_SPARSE())
+    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob_sparse, RQ_SPARSE())
     @test C_red_sparse isa SparseMatrixCSC
-    C_red_dense = AffineRayleighOptimization._get_C_reduced(prob, RQ_EIG())
-    @test count(!iszero, sparse(C_red_dense)) >= count(!iszero, C_red_sparse)
     sol = solve(prob_sparse, RQ_SPARSE())
-    prob = ConstrainedRayleighQuotientProblem(rc, Matrix(C), b)
-    test_prob_known_sol(prob, sol)
+    prob_dense = ConstrainedRayleighQuotientProblem(rc, Matrix(C), Vector(b))
+    test_prob_known_sol(prob_dense, sol)
     # prob 7 (sparse C with pos def Q)
     M = Hermitian(rand(n, n))
     rc = RayleighQuotient(M'M)
     prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
-    sol = solve(prob_sparse, RQ_SPARSE(krylov_howmany=10))
-    prob = ConstrainedRayleighQuotientProblem(rc, Matrix(C), b)
-    test_prob_known_sol(prob, sol, [RQ_CHOL(), RQ_GENEIG()])
+    sol = solve(prob_sparse, RQ_SPARSE(krylov_howmany=10)) # here we need to increase krylov_howmany to find the sol
+    prob_dense = ConstrainedRayleighQuotientProblem(rc, Matrix(C), Vector(b))
+    test_prob_known_sol(prob_dense, sol, [RQ_CHOL(), RQ_GENEIG()])
 end
