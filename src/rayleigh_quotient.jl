@@ -142,7 +142,7 @@ function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
     bk = first(b[inds_remove]) # only one element, no support for b Span
     Ck = C[inds_remove, :] # replace mult by J with slicing, see above
-    return sparse((C - (1/bk) * b * Ck)[inds_keep, :])
+    return (C - (1/bk) * b * Ck)[inds_keep, :]
 end
 
 function _inds_to_remove_and_keep(b, N)
