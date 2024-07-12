@@ -138,8 +138,8 @@ function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE
     C = prob.C
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
     bk = first(b[inds_remove]) # only one element, no support for b Span
-    Ck = C[inds_remove, :]
-    return (C - (1/bk) * b * Ck)[inds_keep, :] # replace mult by J with slicing, see above
+    Ck = C[inds_remove, :] # replace mult by J with slicing, see above
+    return sparse((C - (1/bk) * b * Ck)[inds_keep, :])
 end
 
 function _inds_to_remove_and_keep(b, N)
@@ -177,7 +177,8 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
 end
 
 function _get_P_PQP_homo(C, Q)
-    P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C
+    #=P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C=#
+    P = I - C' * InverseMap(lu(Hermitian(C * C'))) * C # sparse cholesky is incompatible with ldiv!
     return P, P' * Q * P
 end
 
@@ -188,13 +189,13 @@ end
 
 ## Tests
 @testitem "RayleighQuotientProblem" begin
-    using LinearAlgebra, Random
+    using LinearAlgebra, Random, SparseArrays
     import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG, RQ_SPARSE
     all_solvers = [RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()]
     function test_prob_known_sol(prob, known_sol, solvers=all_solvers)
         for solver in solvers
             sol = solve(prob, solver)
-            if isa(prob.b, Span)
+            if prob.b isa Span
                 @test (sol ≈ known_sol) || (sol ≈ -known_sol) # sign undetermined if b Span?
             else
                 @test sol ≈ known_sol
@@ -243,4 +244,35 @@ end
     rc = RayleighQuotient(M'M)
     prob = ConstrainedRayleighQuotientProblem(rc, C, b)
     test_prob(prob)
+    # prob 6 (sparse C)
+    n = 1000
+    k = 300
+    Q = Hermitian(rand(n,n))
+    rc = RayleighQuotient(Q)
+    b = rand(k)
+    function generate_sparse_fullrank_C(n, k, sparsity)
+        C = zeros(k, n)
+        fullrank = false
+        while !fullrank
+            C = sprand(k, n, sparsity)
+            fullrank = rank(C) == k
+        end
+        return C
+    end
+    C = generate_sparse_fullrank_C(n, k, 0.01)
+    prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
+    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob, RQ_SPARSE())
+    @test C_red_sparse isa SparseMatrixCSC
+    C_red_dense = AffineRayleighOptimization._get_C_reduced(prob, RQ_EIG())
+    @test count(!iszero, sparse(C_red_dense)) >= count(!iszero, C_red_sparse)
+    sol = solve(prob_sparse, RQ_SPARSE())
+    prob = ConstrainedRayleighQuotientProblem(rc, Matrix(C), b)
+    test_prob_known_sol(prob, sol)
+    # prob 7 (sparse C with pos def Q)
+    M = Hermitian(rand(n, n))
+    rc = RayleighQuotient(M'M)
+    prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
+    sol = solve(prob_sparse, RQ_SPARSE())
+    prob = ConstrainedRayleighQuotientProblem(rc, Matrix(C), b)
+    test_prob_known_sol(prob, sol)
 end

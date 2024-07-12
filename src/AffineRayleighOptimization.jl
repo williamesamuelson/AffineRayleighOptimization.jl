@@ -4,6 +4,7 @@ import SciMLBase: solve, init, solve!
 using TestItems
 using LinearMaps
 using KrylovKit
+using SparseArrays
 
 export RayleighQuotient, QuadraticForm
 export ConstrainedRayleighQuotientProblem, ConstrainedQuadraticFormProblem, Span

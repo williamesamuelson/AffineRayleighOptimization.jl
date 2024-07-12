@@ -8,6 +8,7 @@ KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 
 [weakdeps]
@@ -17,24 +18,25 @@ LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 AffineRayleighOptimizationLinearSolveExt = "LinearSolve"
 
 [compat]
-LinearAlgebra = "1"
-LinearSolve = "2"
+Aqua = "0.8"
 KrylovKit = "0.8"
+LinearAlgebra = "1"
 LinearMaps = "3"
+LinearSolve = "2"
 Random = "1"
 SciMLBase = "2"
+SparseArrays = "1"
 Test = "1"
 TestItemRunner = "0.2"
 TestItems = "0.1"
 julia = "1.9"
-Aqua = "0.8"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
-Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 
 [targets]
 test = ["Test", "TestItemRunner", "Random", "LinearSolve", "Aqua"]
