@@ -73,13 +73,16 @@ struct RQ_CHOL <: RQ_ALG end
 struct RQ_GENEIG <: RQ_ALG end
 const DEFAULT_SELECTVEC_EPS = 1e-15
 @kwdef struct RQ_EIG{T} <: RQ_ALG
-    eps::T = DEFAULT_SELECTVEC_EPS
-end
-@kwdef struct RQ_HOMO{T} <: RQ_ALG
-    eps::T = DEFAULT_SELECTVEC_EPS
+    krylov_howmany::Int = 5
+    krylov_kwargs::T = (;)
 end
 @kwdef struct RQ_SPARSE{T} <: RQ_ALG
-    eps::T = DEFAULT_SELECTVEC_EPS
+    krylov_howmany::Int = 5
+    krylov_kwargs::T = (;)
+end
+@kwdef struct RQ_HOMO{T} <: RQ_ALG
+    krylov_howmany::Int = 5
+    krylov_kwargs::T = (;)
 end
 
 solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q,Cmat} = solve(prob, RQ_GENEIG())
@@ -152,7 +155,7 @@ function _solve_homo_prob(C_reduced, prob::ConstrainedRayleighQuotientProblem, a
     b = _get_b(prob)
     C = prob.C
     homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, C_reduced, zero(b))
-    sol = solve(homo_prob, RQ_HOMO(alg.eps))
+    sol = solve(homo_prob, RQ_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
     t = dot(b, C, sol) / dot(b, b)
     return sol / t
 end
@@ -160,7 +163,7 @@ end
 function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span} , alg) where {Q,Cmat}
     b = _get_b(prob)[:, 1] # for b Span, normalization is not specified
     homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
-    return solve(homo_prob, RQ_HOMO(alg.eps)) # returns a view, is that ok?
+    return solve(homo_prob, RQ_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
 end
 
 function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_HOMO) where {Q,Cmat}
@@ -171,9 +174,11 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
     _, eigvecs, info = eigsolve(PQP, size(C, 2), howmany, :SR; ishermitian=true)
     ind = _select_vector_index(eigvecs, P)
     !isnothing(ind) && return eigvecs[ind] # if an ok vector is found, return it, otherwise, look for more
-    howmany = size(C, 1) + 1 # this is often too large
-    _, eigvecs, info = eigsolve(PQP, first(eigvecs), howmany, :SR; ishermitian=true)
-    return eigvecs[_select_vector_index(eigvecs, P)]
+    #=howmany = size(C, 1) + 1 # this is often too large=#
+    _, eigvecs, info = eigsolve(PQP, first(eigvecs), alg.krylov_howmany, :SR; ishermitian=true, alg.krylov_kwargs...)
+    ind = _select_vector_index(eigvecs, P)
+    !isnothing(ind) && return eigvecs[ind]
+    error("Solution was not found. Increase alg.krylov_howmany and/or krylovdim in alg.krylov_kwargs to look for more candidates")
 end
 
 function _get_P_PQP_homo(C, Q)
@@ -272,7 +277,7 @@ end
     M = Hermitian(rand(n, n))
     rc = RayleighQuotient(M'M)
     prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
-    sol = solve(prob_sparse, RQ_SPARSE())
+    sol = solve(prob_sparse, RQ_SPARSE(krylov_howmany=10))
     prob = ConstrainedRayleighQuotientProblem(rc, Matrix(C), b)
-    test_prob_known_sol(prob, sol)
+    test_prob_known_sol(prob, sol, [RQ_CHOL(), RQ_GENEIG()])
 end
