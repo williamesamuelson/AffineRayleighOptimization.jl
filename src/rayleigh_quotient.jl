@@ -184,8 +184,8 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
 end
 
 function _get_P_PQP_homo(C, Q)
-    #=P = I - C' * InverseMap(factorize(Hermitian(C * C'))) * C=#
-    F = lu(Hermitian(C * C')) #sparse cholesky is incompatible with ldiv!
+    #=F = factorize(Hermitian(C * C')) #sparse cholesky is incompatible with ldiv!=#
+    F = lu!(Hermitian(C * C'))
     issymmetric = eltype(C) <: Real # I think this is correct
     P = I - C' * LinearMap(InverseMap(F); ishermitian=true, issymmetric, isposdef=true) * C
     P = LinearMap(P; ishermitian=true)
