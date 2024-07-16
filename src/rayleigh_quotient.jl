@@ -85,8 +85,18 @@ end
     krylov_kwargs::T = (;)
 end
 
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q,Cmat} = solve(prob, RQ_EIG())
+solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q,Cmat} = solve(prob, RQ_CHOL())
 solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}) where {Q,Cmat} = solve(prob, RQ_EIG())
+@testitem "Default solvers" begin
+    using Random
+    import AffineRayleighOptimization: RQ_EIG, RQ_CHOL
+    Random.seed!(1234)
+    prob_span = ConstrainedRayleighQuotientProblem(rand(2,2), rand(1, 2), Span(rand(1)))
+    prob_vec = ConstrainedRayleighQuotientProblem(rand(2,2), rand(1, 2), rand(1))
+    @test solve(prob_span) ≈ solve(prob_span, RQ_EIG()) || solve(prob_span) ≈ -solve(prob_span, RQ_EIG())
+    @test solve(prob_vec) ≈ solve(prob_vec, RQ_CHOL())
+end
+
 # not so nice, but helps for method ambs
 solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_GENEIG) where {Q,Cmat} = _span_incomp_error_msg(alg)
 solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_CHOL) where {Q,Cmat} = _span_incomp_error_msg(alg)
@@ -95,7 +105,9 @@ solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_HOMO) whe
 _span_incomp_error_msg(alg) = error("$alg is incompatible with b a Span. Use RQ_EIG() instead.")
 
 @testitem "Span incompatible" begin
+    using Random
     import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_SPARSE, RQ_HOMO
+    Random.seed!(1234)
     prob = ConstrainedRayleighQuotientProblem(rand(1,1), rand(1), Span(rand(1)))
     for solver in [RQ_GENEIG(), RQ_CHOL(), RQ_SPARSE(), RQ_HOMO()]
         @test_throws ErrorException solve(prob, solver)
