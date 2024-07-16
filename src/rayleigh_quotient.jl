@@ -299,7 +299,10 @@ end
     M = Hermitian(rand(n, n))
     rc = RayleighQuotient(M'M)
     prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
-    sol = solve(prob_sparse, RQ_SPARSE(krylov_howmany=10)) # here we need to increase krylov_howmany to find the sol
-    prob_dense = ConstrainedRayleighQuotientProblem(rc, Matrix(C), Vector(b))
+    # here we need to increase krylov_howmany to find the sol
+    @test_throws ErrorException solve(prob_sparse, RQ_SPARSE())
+    sol = solve(prob_sparse, RQ_SPARSE(krylov_howmany=10))
+    rc_dense = RayleighQuotient(Matrix(rc.quadratic_form))
+    prob_dense = ConstrainedRayleighQuotientProblem(rc_dense, Matrix(C), Vector(b))
     test_prob_known_sol(prob_dense, sol, [RQ_CHOL(), RQ_GENEIG()])
 end
