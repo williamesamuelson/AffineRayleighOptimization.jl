@@ -85,13 +85,36 @@ end
     krylov_kwargs::T = (;)
 end
 
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q,Cmat} = solve(prob, RQ_GENEIG())
+solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q,Cmat} = solve(prob, RQ_CHOL())
 solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}) where {Q,Cmat} = solve(prob, RQ_EIG())
-const SPAN_INCOMPATIBLE_ALGS = Union{RQ_GENEIG, RQ_CHOL, RQ_SPARSE, RQ_HOMO}
-function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::SPAN_INCOMPATIBLE_ALGS) where {Q,Cmat}
-    error("$alg is incompatible with b a Span. Use RQ_EIG() instead.")
+@testitem "Default solvers" begin
+    using Random
+    import AffineRayleighOptimization: RQ_EIG, RQ_CHOL
+    Random.seed!(1234)
+    prob_span = ConstrainedRayleighQuotientProblem(rand(2,2), rand(1, 2), Span(rand(1)))
+    prob_vec = ConstrainedRayleighQuotientProblem(rand(2,2), rand(1, 2), rand(1))
+    @test solve(prob_span) ≈ solve(prob_span, RQ_EIG()) || solve(prob_span) ≈ -solve(prob_span, RQ_EIG())
+    @test solve(prob_vec) ≈ solve(prob_vec, RQ_CHOL())
 end
-function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_GENEIG) where {Q,Cmat}
+
+# not so nice, but helps for method ambs
+solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_GENEIG) where {Q,Cmat} = _span_incomp_error_msg(alg)
+solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_CHOL) where {Q,Cmat} = _span_incomp_error_msg(alg)
+solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_SPARSE) where {Q,Cmat} = _span_incomp_error_msg(alg)
+solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_HOMO) where {Q,Cmat} = _span_incomp_error_msg(alg)
+_span_incomp_error_msg(alg) = error("$alg is incompatible with b a Span. Use RQ_EIG() instead.")
+
+@testitem "Span incompatible" begin
+    using Random
+    import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_SPARSE, RQ_HOMO
+    Random.seed!(1234)
+    prob = ConstrainedRayleighQuotientProblem(rand(1,1), rand(1), Span(rand(1)))
+    for solver in [RQ_GENEIG(), RQ_CHOL(), RQ_SPARSE(), RQ_HOMO()]
+        @test_throws ErrorException solve(prob, solver)
+    end
+end
+
+function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
     augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
@@ -103,7 +126,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
     return unnormalized_sol / dot(Nv, eigsol)
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_CHOL) where {Q,Cmat}
+function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_CHOL)
     augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
@@ -117,12 +140,7 @@ function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}
 end
 
 #https://www.cis.upenn.edu/~jshi/papers/supplement_nips2006.pdf
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
-    C_reduced = _get_C_reduced(prob, alg)
-    return _solve_homo_prob(C_reduced, prob, alg)
-end
-# can't combine because of ambiguous methods...
-function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_SPARSE) where {Q,Cmat}
+function solve(prob::ConstrainedRayleighQuotientProblem, alg::Union{RQ_EIG, RQ_SPARSE})
     C_reduced = _get_C_reduced(prob, alg)
     return _solve_homo_prob(C_reduced, prob, alg)
 end
@@ -167,7 +185,7 @@ function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem{Q,Cmat,
     return solve(homo_prob, RQ_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}, alg::RQ_HOMO) where {Q,Cmat}
+function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
     @assert iszero(prob.b) "b must be zero"
     C = prob.C
     P, PQP = _get_P_PQP_homo(C, prob.Q.quadratic_form)
