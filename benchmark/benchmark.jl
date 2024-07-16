@@ -2,14 +2,14 @@ using AffineRayleighOptimization, LinearAlgebra, SparseArrays
 import AffineRayleighOptimization: RQ_EIG, RQ_SPARSE, RQ_GENEIG, RQ_CHOL
 using BenchmarkTools, ProfileView, Plots
 
-function generate_sparse_mats(sparsity, n, k)
-    Q = Hermitian(rand(n,n))
+function generate_sparse_mats(sparsity, n, k, maxit=1e4)
+    Q = Hermitian(sprand(n, n, 1/n))
     rc = RayleighQuotient(Q)
-    b = sprand(k, 0.1)
-    if iszero(b)
-        b[1] = rand()
-    end
-    C = generate_sparse_fullrank_C(n, k, sparsity)
+    b = sparse(rand(k))
+    #=if iszero(b)=#
+    #=    b[1] = rand()=#
+    #=end=#
+    C = generate_sparse_fullrank_C(n, k, sparsity, maxit)
     return rc, C, b
 end
 
@@ -23,13 +23,17 @@ function generate_sparse_fullrank_C(n, k, sparsity, maxit=1e4)
     error("maxit reached")
 end
 
+function get_combinations()
+    combs = collect(Base.product((:sparse, :dense), (RQ_SPARSE(), RQ_EIG()))) |> vec
+    return vcat(combs, vec(collect(Base.product((:dense,), (RQ_CHOL(), RQ_GENEIG())))))
+end
+
 # remember to run first once to compile
 function run_benchmark(sparsity, n, k)
     @time rc, C, b = generate_sparse_mats(sparsity, n, k)
     prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
-    prob_dense = ConstrainedRayleighQuotientProblem(rc, Matrix(C), Vector(b))
-    combs = collect(Base.product((:sparse, :dense), (RQ_SPARSE(), RQ_EIG()))) |> vec
-    combs = vcat(combs, vec(collect(Base.product((:dense,), (RQ_CHOL(), RQ_GENEIG())))))
+    prob_dense = ConstrainedRayleighQuotientProblem(RayleighQuotient(Matrix(rc.quadratic_form)), Matrix(C), Vector(b))
+    combs = get_combinations()
     times = zeros(length(combs))
     for (j, (prob, solver)) in enumerate(combs)
         if prob == :sparse
@@ -38,10 +42,8 @@ function run_benchmark(sparsity, n, k)
             times[j] =  @belapsed solve($prob_dense, $solver)
         end
     end
-    return combs, times
+    return times
 end
-
-BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
 
 function run_benchmarks(ns, ks, sparsity)
     return map((n, k)->run_benchmark(sparsity, n, k), ns, ks)
@@ -49,15 +51,16 @@ end
 
 function benchmark_times(ns, ks, sparsity)
     datas = run_benchmarks(ns, ks, sparsity)
-    times = mapreduce(data->data[2]', vcat, datas)
-    #=labels = datas[1][1]=#
+    times = mapreduce(data->data', vcat, datas)
     return times
 end
 
-ns = [100, 200, 500, 1000]
-ks = round.(Int, ns/100)
-sparsities = [0.05, 0.01, 0.005]
-#=[generate_sparse_mats(sparsity, ns[i], ks[i]) for sparsity in sparsities, i in eachindex(sparsities)]=#
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
+
+ns = [10, 100, 200, 500, 1000]
+ks = round.(Int, ns/10)
+sparsities = [0.5, 0.1, 0.05, 0.01]
+#=[generate_sparse_mats(sparsity, ns[i], ks[i], 1e9) for sparsity in sparsities, i in eachindex(ns)]=#
 times = []
 for sp in sparsities
     time = benchmark_times(ns, ks, sp)
@@ -66,13 +69,14 @@ for sp in sparsities
 end
 
 pls = []
+display(get_combinations())
 legend = ["RQ_SPARSE (s)" "RQ_SPARSE (d)" "RQ_EIG (s)" "RQ_EIG (d)" "RQ_CHOL" "RQ_GENEIG"]
 for i in eachindex(sparsities)
     if i ≠ 1
         legend = false
     end
-    p = plot(ns, times[i], labels=legend, marker=true, yscale=:log10, xscale=:log10, title="sparsity=$(sparsities[i])", legend=:topleft)
+    p = plot(ns, times[i], labels=legend, marker=true, yscale=:log10, xscale=:log10, title="sparsity=$(sparsities[i])", legend=:topleft, xlabel="n", ylabel="time")
     push!(pls, p)
 end
 plot(pls..., layout=(2,2), dpi=300)
-#=savefig("benchmark_k=n_over_100.png")=#
+#=savefig("benchmark_k=n_over_10.png")=#

@@ -258,7 +258,7 @@ end
     # prob 6 (sparse C)
     n = 1000
     k = 300
-    Q = Hermitian(rand(n,n))
+    Q = Hermitian(sprand(n, n, 1/n))
     rc = RayleighQuotient(Q)
     b = sprand(k, 0.1)
     function generate_sparse_fullrank_C(n, k, sparsity)
