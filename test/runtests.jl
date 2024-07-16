@@ -1,5 +1,6 @@
-using TestItemRunner
+using AffineRayleighOptimization, TestItemRunner, Aqua, JET
 
-include("Aqua.jl")
 @run_package_tests
+include("Aqua.jl")
+include("JET.jl")
 
