@@ -28,7 +28,7 @@ SciMLBase = "2"
 SparseArrays = "1"
 Test = "1"
 TestItemRunner = "0.2"
-TestItems = "0.1"
+TestItems = "1.0"
 julia = "1.9"
 
 [extras]
