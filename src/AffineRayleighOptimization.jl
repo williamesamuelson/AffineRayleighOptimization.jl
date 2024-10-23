@@ -5,8 +5,8 @@ using TestItems
 using LinearMaps
 using KrylovKit
 
-export RayleighQuotient, QuadraticForm
-export ConstrainedRayleighQuotientProblem, ConstrainedQuadraticFormProblem, Span
+# export QuadraticForm
+export ConstrainedProblem, ConstrainedRayleighQuotientProblem, Span
 export QF_BACKSLASH, QF_LINEARSOLVE
 
 export solve

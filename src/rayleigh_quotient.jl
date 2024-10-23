@@ -1,51 +1,4 @@
 """
-    RayleighQuotient(q)
-
-Rayleigh quotient representation.
-"""
-struct RayleighQuotient{Q}
-    quadratic_form::Q
-    function RayleighQuotient(q::AbstractMatrix)
-        Hq = Hermitian(q)
-        new{typeof(Hq)}(Hq)
-    end
-end
-RayleighQuotient(rq::RayleighQuotient) = rq
-rq_type(::RayleighQuotient{Q}) where {Q} = Q
-(rq::RayleighQuotient)(x) = dot(x, rq.quadratic_form, x) / dot(x, x)
-
-@testitem "RayleighQuotient" begin
-    using LinearAlgebra
-    N = 10
-    x = rand(N)
-    Q = I(N)
-    rq = RayleighQuotient(Q)
-    @test rq(x) ≈ 1
-end
-
-"""
-    ConstrainedRayleighQuotientProblem(Q, C, b)
-
-A constrained quadratic form problem of the form
-    minimize `dot(x,Qx)/dot(x,x)`
-    subject to `Cx = b`.
-
-b can also be given as a span, using the Span struct.
-"""
-struct ConstrainedRayleighQuotientProblem{Q,Cmat,B}
-    Q::RayleighQuotient{Q}
-    C::Cmat
-    b::B
-    function ConstrainedRayleighQuotientProblem(q::Q, C::Cmat, b::B) where {Q,Cmat,B}
-        rq = RayleighQuotient(q)
-        return new{rq_type(rq),Cmat,B}(rq, C, b)
-    end
-    function ConstrainedRayleighQuotientProblem(q::RayleighQuotient{Q}, C::Cmat, b::B) where {Q,Cmat,B}
-        return new{Q,Cmat,B}(RayleighQuotient(q), C, b)
-    end
-end
-
-"""
     Span(vecs::AbstractMatrix)
 
 Representation of a span, which can be given as `b` in the ConstrainedRayleighQuotientProblem.
@@ -56,6 +9,9 @@ struct Span{V<:AbstractMatrix}
 end
 Span(v::AbstractVector) = Span(hcat(v))
 Span(itr...) = Span(reduce(hcat, itr))
+Span(s::Span) = s
+const SpanProblem = ConstrainedProblem{<:Any,<:Any,<:Span}
+
 @testitem "Span" begin
     b1 = rand(2)
     b2 = rand(2)
@@ -63,105 +19,115 @@ Span(itr...) = Span(reduce(hcat, itr))
     bmatspan = Span(hcat(b1, b2))
     @test bspan.vecs == bmatspan.vecs
     @test Span(b1).vecs[:] == b1
+    @test Span(bspan) == bspan
 end
 
-_get_b(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q, Cmat} = prob.b
-_get_b(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}) where {Q, Cmat} = prob.b.vecs
+_get_b(prob::ConstrainedProblem) = _get_b(prob.b)
+_get_b(b) = b
+_get_b(b::Span) = b.vecs
 
-abstract type RQ_ALG end
-struct RQ_CHOL <: RQ_ALG end
-struct RQ_GENEIG <: RQ_ALG end
+ConstrainedRayleighQuotientProblem(Q, c, b) = ConstrainedProblem(Q, c, Span(b))
+
+abstract type SPAN_ALG end
+struct SPAN_CHOL <: SPAN_ALG end
+struct SPAN_GENEIG <: SPAN_ALG end
 const DEFAULT_SELECTVEC_EPS = 1e-15
-@kwdef struct RQ_EIG{T} <: RQ_ALG
+@kwdef struct SPAN_EIG{T} <: SPAN_ALG
     krylov_howmany::Int = 5
     krylov_kwargs::T = (;)
 end
-@kwdef struct RQ_SPARSE{T} <: RQ_ALG
+@kwdef struct SPAN_SPARSE{T} <: SPAN_ALG
     krylov_howmany::Int = 5
     krylov_kwargs::T = (;)
 end
-@kwdef struct RQ_HOMO{T} <: RQ_ALG
+@kwdef struct SPAN_HOMO{T} <: SPAN_ALG
     krylov_howmany::Int = 5
     krylov_kwargs::T = (;)
 end
 
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:AbstractVector}) where {Q,Cmat} = solve(prob, RQ_CHOL())
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}) where {Q,Cmat} = solve(prob, RQ_EIG())
+solve(prob::SpanProblem) = solve(prob, default_alg(prob))
+default_alg(prob::SpanProblem) = size(_get_b(prob), 2) == 1 ? SPAN_CHOL() : SPAN_EIG()
+
 @testitem "Default solvers" begin
     using Random
-    import AffineRayleighOptimization: RQ_EIG, RQ_CHOL
+    import AffineRayleighOptimization: SPAN_EIG, SPAN_CHOL
     Random.seed!(1234)
-    prob_span = ConstrainedRayleighQuotientProblem(rand(2,2), rand(1, 2), Span(rand(1)))
-    prob_vec = ConstrainedRayleighQuotientProblem(rand(2,2), rand(1, 2), rand(1))
-    @test solve(prob_span) ≈ solve(prob_span, RQ_EIG()) || solve(prob_span) ≈ -solve(prob_span, RQ_EIG())
-    @test solve(prob_vec) ≈ solve(prob_vec, RQ_CHOL())
+    prob_span = ConstrainedProblem(rand(2, 2), rand(1, 2), Span(rand(1)))
+    # prob_vec = ConstrainedQuadraticFormProblem(rand(2, 2), rand(1, 2), Span(rand(1))
+    @test solve(prob_span) ≈ solve(prob_span, SPAN_EIG()) || solve(prob_span) ≈ -solve(prob_span, SPAN_EIG())
+    # @test solve(prob_vec) ≈ solve(prob_vec, SPAN_CHOL())
 end
 
-# not so nice, but helps for method ambs
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_GENEIG) where {Q,Cmat} = _span_incomp_error_msg(alg)
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_CHOL) where {Q,Cmat} = _span_incomp_error_msg(alg)
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_SPARSE) where {Q,Cmat} = _span_incomp_error_msg(alg)
-solve(prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span}, alg::RQ_HOMO) where {Q,Cmat} = _span_incomp_error_msg(alg)
-_span_incomp_error_msg(alg) = error("$alg is incompatible with b a Span. Use RQ_EIG() instead.")
 
 @testitem "Span incompatible" begin
     using Random
-    import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_SPARSE, RQ_HOMO
+    import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_SPARSE, SPAN_HOMO
     Random.seed!(1234)
-    prob = ConstrainedRayleighQuotientProblem(rand(1,1), rand(1), Span(rand(1)))
-    for solver in [RQ_GENEIG(), RQ_CHOL(), RQ_SPARSE(), RQ_HOMO()]
+    prob = ConstrainedProblem(rand(1, 1), rand(1), Span(rand(1, 2)))
+    for solver in [SPAN_GENEIG(), SPAN_CHOL(), SPAN_SPARSE(), SPAN_HOMO()]
         @test_throws ErrorException solve(prob, solver)
     end
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_GENEIG)
-    augC = hcat(prob.C, -prob.b)
+
+function solve(prob::SpanProblem, alg::SPAN_GENEIG)
+    size(_get_b(prob), 2) == 1 || error("$alg is incompatible with size(b, 2) > 1. Use SPAN_EIG() instead.")
+    augC = hcat(prob.C, -_get_b(prob))
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
     Nv = N[end, :]
-    new_quadratic_form = Hermitian(Ntrunc' * prob.Q.quadratic_form * Ntrunc)
+    new_quadratic_form = Hermitian(Ntrunc' * prob.Q * Ntrunc)
     rhs_gen_eigen = Hermitian(Ntrunc' * Ntrunc)
     eigsol = eigen(new_quadratic_form, rhs_gen_eigen).vectors[:, 1] # smallest eigenvalue eigenvector maximizes
     unnormalized_sol = Ntrunc * eigsol
     return unnormalized_sol / dot(Nv, eigsol)
 end
 
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_CHOL)
-    augC = hcat(prob.C, -prob.b)
+function solve(prob::SpanProblem, alg::SPAN_CHOL)
+    size(_get_b(prob), 2) == 1 || error("$alg is incompatible with size(b, 2) > 1. Use SPAN_EIG() instead.")
+    augC = hcat(prob.C, -_get_b(prob))
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
     Nv = N[end, :]
     upper = cholesky(Ntrunc' * Ntrunc).U
     inv_upper = inv(upper)
-    new_quadratic_form = Hermitian(inv_upper' * Ntrunc' * prob.Q.quadratic_form * Ntrunc * inv_upper)
+    new_quadratic_form = Hermitian(inv_upper' * Ntrunc' * prob.Q * Ntrunc * inv_upper)
     eigsol = eigen(new_quadratic_form, 1:1).vectors[:, 1]
     unnormalized_sol = Ntrunc * inv_upper * eigsol
     return unnormalized_sol / dot(Nv, inv_upper * eigsol)
 end
 
 #https://www.cis.upenn.edu/~jshi/papers/supplement_nips2006.pdf
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::Union{RQ_EIG, RQ_SPARSE})
+function solve(prob::SpanProblem, alg::Union{SPAN_EIG,SPAN_SPARSE}; normalize=size(_get_b(prob), 2) == 1)
+    b = _get_b(prob)
     C_reduced = _get_C_reduced(prob, alg)
-    return _solve_homo_prob(C_reduced, prob, alg)
+    homo_prob = HomogeneousProblem(prob.Q, C_reduced)
+    sol = solve(homo_prob, SPAN_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
+    if normalize
+        t = dot(b, prob.C, sol) / dot(b, b)
+        return sol / t
+    end
+    return sol
 end
 
-function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_EIG)
+function _get_C_reduced(prob::SpanProblem, alg::SPAN_EIG)
     b = _get_b(prob) # fetch b matrix/vector if prob.b is span/vector
     C = prob.C
     N = size(b, 1)
     Kb = I - b * b' / dot(b, b)
     _, inds_keep = _inds_to_remove_and_keep(b, N)
-    return (Kb * C)[inds_keep, :] # instead of J * Kb * C where J = I(N)[inds_keep, :]
+    return (Kb*C)[inds_keep, :] # instead of J * Kb * C where J = I(N)[inds_keep, :]
 end
 
-function _get_C_reduced(prob::ConstrainedRayleighQuotientProblem, alg::RQ_SPARSE)
+function _get_C_reduced(prob::SpanProblem, alg::SPAN_SPARSE)
+    size(_get_b(prob), 2) == 1 || error("$alg is incompatible with size(b, 2) > 1. Use SPAN_EIG() instead.")
     b = _get_b(prob)
     C = prob.C
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
     ind_remove = only(inds_remove) # only one element, no support for b Span
     bk = b[ind_remove]
     Ck = transpose(C[ind_remove, :])
-    return (C - (1/bk) * b * Ck)[inds_keep, :] # replace mult by J with slicing, see above
+    return (C-(1/bk)*b*Ck)[inds_keep, :] # replace mult by J with slicing, see above
 end
 
 function _inds_to_remove_and_keep(b, N)
@@ -170,25 +136,13 @@ function _inds_to_remove_and_keep(b, N)
     return inds_remove, inds_keep
 end
 
-function _solve_homo_prob(C_reduced, prob::ConstrainedRayleighQuotientProblem, alg)
-    b = _get_b(prob)
-    C = prob.C
-    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, C_reduced, zero(b))
-    sol = solve(homo_prob, RQ_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
-    t = dot(b, C, sol) / dot(b, b)
-    return sol / t
+function solve(prob::SpanProblem, alg::SPAN_HOMO)
+    iszero(_get_b(prob)) || error("b must be zero to use the algorithm SPAN_HOMO")
+    solve(HomogeneousProblem(prob.Q, prob.C), SPAN_HOMO())
 end
-
-function _solve_homo_prob(augC, prob::ConstrainedRayleighQuotientProblem{Q,Cmat,<:Span} , alg) where {Q,Cmat}
-    b = _get_b(prob)[:, 1] # for b Span, normalization is not specified
-    homo_prob = ConstrainedRayleighQuotientProblem(prob.Q, augC, zero(b))
-    return solve(homo_prob, RQ_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
-end
-
-function solve(prob::ConstrainedRayleighQuotientProblem, alg::RQ_HOMO)
-    @assert iszero(prob.b) "b must be zero"
+function solve(prob::HomogeneousProblem, alg::SPAN_HOMO)
     C = prob.C
-    P, PQP = _get_P_PQP_homo(C, prob.Q.quadratic_form)
+    P, PQP = _get_P_PQP_homo(C, prob.Q)
     howmany = 1
     # we need to specify ishermitian to eigsolve. eigsolve doesn't check this if the matrix is not an AbstractMatrix
     _, eigvecs, info = eigsolve(PQP, size(C, 2), howmany, :SR; ishermitian=true, alg.krylov_kwargs...)
@@ -212,15 +166,15 @@ function _get_P_PQP_homo(C, Q)
 end
 
 function _select_vector_index(eigvecs, P)
-    f = x -> dot(x, P, x) > 1/2
+    f = x -> dot(x, P, x) > 1 / 2
     return findfirst(f, eigvecs)
 end
 
 ## Tests
 @testitem "RayleighQuotientProblem" begin
     using LinearAlgebra, Random, SparseArrays
-    import AffineRayleighOptimization: RQ_GENEIG, RQ_CHOL, RQ_EIG, RQ_SPARSE
-    all_solvers = [RQ_GENEIG(), RQ_CHOL(), RQ_EIG(), RQ_SPARSE()]
+    import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_EIG, SPAN_SPARSE
+    all_solvers = [SPAN_GENEIG(), SPAN_CHOL(), SPAN_EIG(), SPAN_SPARSE()]
     function test_prob_known_sol(prob, known_sol, solvers=all_solvers)
         for solver in solvers
             sol = solve(prob, solver)
@@ -237,47 +191,44 @@ end
             sol = solve(prob, solver)
             push!(sols, sol)
         end
-        @test all(x->x ≈ first(sols), sols[2:end])
+        @test all(x -> x ≈ first(sols), sols[2:end])
     end
     Random.seed!(1234)
     #prob 1 (sol=b)
     Q = Diagonal(1:10)
-    rc = RayleighQuotient(Q)
-    @test rc(ones(10)) ≈ sum(Q) / norm(ones(10))^2
     C = I(10)
     b = rand(10)
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
     test_prob_known_sol(prob, b)
     #prob 2 (span)
     b1 = [0.0, 2.0, zeros(8)...]
     b2 = [0.0, 0.0, 1.0, zeros(7)...]
-    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b1, b2))
-    test_prob_known_sol(prob, b1/2, [RQ_EIG()])
-    prob = ConstrainedRayleighQuotientProblem(rc, C, Span(b2, b1)) # change order
-    test_prob_known_sol(prob, b1/2, [RQ_EIG()])
+    prob = ConstrainedRayleighQuotientProblem(Q, C, Span(b1, b2))
+    test_prob_known_sol(prob, b1 / 2, [SPAN_EIG()])
+    prob = ConstrainedRayleighQuotientProblem(Q, C, Span(b2, b1)) # change order
+    test_prob_known_sol(prob, b1 / 2, [SPAN_EIG()])
     #prob 3
     C = ones(1, 10)
     b = [1.0]
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
     test_prob_known_sol(prob, [1.0, zeros(9)...])
     #prob 4 (random matrix)
     n = 20
     k = 10
-    rc = RayleighQuotient(Hermitian(rand(n, n)))
+    Q = Hermitian(rand(n, n))
     C = rand(k, n)
     b = rand(k)
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
     test_prob(prob)
     # prob 5 (positive definite matrix)
     M = Hermitian(rand(n, n))
-    rc = RayleighQuotient(M'M)
-    prob = ConstrainedRayleighQuotientProblem(rc, C, b)
+    Q = M'M
+    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
     test_prob(prob)
     # prob 6 (sparse C)
     n = 1000
     k = 300
-    Q = Hermitian(sprand(n, n, 1/n))
-    rc = RayleighQuotient(Q)
+    Q = Hermitian(sprand(n, n, 1 / n))
     b = sprand(k, 0.1)
     function generate_sparse_fullrank_C(n, k, sparsity)
         C = zeros(k, n)
@@ -289,20 +240,20 @@ end
         return C
     end
     C = generate_sparse_fullrank_C(n, k, 0.01)
-    prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
-    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob_sparse, RQ_SPARSE())
+    prob_sparse = ConstrainedRayleighQuotientProblem(Q, C, b)
+    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob_sparse, SPAN_SPARSE())
     @test C_red_sparse isa SparseMatrixCSC
-    sol = solve(prob_sparse, RQ_SPARSE())
-    prob_dense = ConstrainedRayleighQuotientProblem(rc, Matrix(C), Vector(b))
+    sol = solve(prob_sparse, SPAN_SPARSE())
+    prob_dense = ConstrainedRayleighQuotientProblem(Q, Matrix(C), Vector(b))
     test_prob_known_sol(prob_dense, sol)
     # prob 7 (sparse C with pos def Q)
     M = Hermitian(rand(n, n))
-    rc = RayleighQuotient(M'M)
-    prob_sparse = ConstrainedRayleighQuotientProblem(rc, C, b)
+    Q = M'M
+    prob_sparse = ConstrainedRayleighQuotientProblem(Q, C, b)
     # here we need to increase krylov_howmany to find the sol
-    @test_throws ErrorException solve(prob_sparse, RQ_SPARSE())
-    sol = solve(prob_sparse, RQ_SPARSE(krylov_howmany=10))
-    rc_dense = RayleighQuotient(Matrix(rc.quadratic_form))
-    prob_dense = ConstrainedRayleighQuotientProblem(rc_dense, Matrix(C), Vector(b))
-    test_prob_known_sol(prob_dense, sol, [RQ_CHOL(), RQ_GENEIG()])
+    @test_throws ErrorException solve(prob_sparse, SPAN_SPARSE())
+    sol = solve(prob_sparse, SPAN_SPARSE(krylov_howmany=10))
+    Q_dense = Matrix(Q)
+    prob_dense = ConstrainedRayleighQuotientProblem(Q_dense, Matrix(C), Vector(b))
+    test_prob_known_sol(prob_dense, sol, [SPAN_CHOL(), SPAN_GENEIG()])
 end

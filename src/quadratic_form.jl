@@ -1,42 +1,29 @@
 """
-    QuadraticForm(quadratic_form)
-
-Quadratic form representation.
-"""
-struct QuadraticForm{Q}
-    quadratic_form::Q
-    function QuadraticForm(q::AbstractMatrix)
-        Hq = Hermitian(q)
-        new{typeof(Hq)}(Hq)
-    end
-end
-QuadraticForm(qf::QuadraticForm) = qf
-(rq::QuadraticForm)(x) = dot(x, rq.quadratic_form, x)
-
-@testitem "QuadraticForm" begin
-    using LinearAlgebra
-    N = 10
-    x = rand(N)
-    Q = I(N)
-    qf = QuadraticForm(Q)
-    @test qf(x) ≈ dot(x, x)
-end
-
-"""
     ConstrainedQuadraticFormProblem(Q, C, b)
 
 A constrained quadratic form problem of the form
     minimize `dot(x,Qx)`
     subject to `Cx = b`.
 """
-struct ConstrainedQuadraticFormProblem{Q,C,B}
-    Q::QuadraticForm{Q}
+struct ConstrainedProblem{Q,C,B}
+    Q::Q
     C::C
     b::B
+    function ConstrainedProblem(_Q, C, b)
+        Q = Hermitian(_Q)
+        return new{typeof(Q),typeof(C),typeof(b)}(Q, C, b)
+    end
 end
-function ConstrainedQuadraticFormProblem(Q, C, b)
-    return ConstrainedQuadraticFormProblem(QuadraticForm(Q), C, b)
+struct HomogeneousProblem{Q,C}
+    Q::Q
+    C::C
+    function HomogeneousProblem(_Q, C)
+        Q = Hermitian(_Q)
+        return new{typeof(Q),typeof(C)}(Q, C)
+    end
 end
+
+const QuadraticProblem = ConstrainedProblem
 
 abstract type QF_ALG end
 struct QF_BACKSLASH <: QF_ALG end
@@ -46,11 +33,11 @@ struct ConstrainedQuadraticFormBackslashSolver{L,B,TM}
     b::B
     transform_matrix::TM
 end
-default_linear_alg(prob::ConstrainedQuadraticFormProblem) = QF_BACKSLASH()
-
+default_linear_alg(prob::QuadraticProblem) = QF_BACKSLASH()
+init(prob::QuadraticProblem) = init(prob, default_linear_alg(prob))
 # https://dept.math.lsa.umich.edu/~speyer/417/Minimization.pdf
-function init(prob::ConstrainedQuadraticFormProblem, alg::QF_BACKSLASH=default_linear_alg(prob))
-    inv_penalty_mat = inv(prob.Q.quadratic_form)
+function init(prob::QuadraticProblem, alg::QF_BACKSLASH)
+    inv_penalty_mat = inv(prob.Q)
     original_lhs_mat = prob.C
     tm = inv_penalty_mat * original_lhs_mat'
     new_lhs = Hermitian(original_lhs_mat * tm)
@@ -69,7 +56,7 @@ end
     Q = Diagonal(1:10)
     C = I
     b = rand(10)
-    prob = ConstrainedQuadraticFormProblem(Q, C, b)
+    prob = ConstrainedProblem(Q, C, b)
     sol = solve(prob)
     @test sol ≈ b
     using LinearSolve
