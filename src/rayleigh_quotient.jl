@@ -22,8 +22,7 @@ const SpanProblem = ConstrainedProblem{<:Any,<:Any,<:Span}
     @test Span(bspan) == bspan
 end
 
-_get_b(prob::ConstrainedProblem) = _get_b(prob.b)
-_get_b(b) = b
+_get_b(prob::SpanProblem) = _get_b(prob.b)
 _get_b(b::Span) = b.vecs
 
 ConstrainedRayleighQuotientProblem(Q, c, b) = ConstrainedProblem(Q, c, Span(b))
