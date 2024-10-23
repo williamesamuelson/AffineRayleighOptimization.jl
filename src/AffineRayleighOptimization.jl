@@ -5,13 +5,12 @@ using TestItems
 using LinearMaps
 using KrylovKit
 
-export RayleighQuotient, QuadraticForm
-export ConstrainedRayleighQuotientProblem, ConstrainedQuadraticFormProblem, Span
+export QuadraticProblem, RayleighProblem, Span
 export QF_BACKSLASH, QF_LINEARSOLVE
 
 export solve
 
 include("quadratic_form.jl")
-include("rayleigh_quotient.jl")
+include("span_problem.jl")
 
 end
