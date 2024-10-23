@@ -4,13 +4,9 @@ using BenchmarkTools, ProfileView, Plots
 
 function generate_sparse_mats(sparsity, n, k, maxit=1e4)
     Q = Hermitian(sprand(n, n, 1/n))
-    rc = RayleighQuotient(Q)
     b = sparse(rand(k))
-    #=if iszero(b)=#
-    #=    b[1] = rand()=#
-    #=end=#
     C = generate_sparse_fullrank_C(n, k, sparsity, maxit)
-    return rc, C, b
+    return Q, C, b
 end
 
 function generate_sparse_fullrank_C(n, k, sparsity, maxit=1e4)

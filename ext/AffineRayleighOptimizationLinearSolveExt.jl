@@ -10,7 +10,7 @@ struct ConstrainedQuadraticFormLinearSolveSolver{LP,TM}
     transform_matrix::TM
 end
 
-function AffineRayleighOptimization.init(prob::ConstrainedProblem, alg::A, args...; kwargs...) where {A<:Union{<:SciMLBase.AbstractLinearAlgorithm,<:QF_LINEARSOLVE}}
+function AffineRayleighOptimization.init(prob::QuadraticProblem, alg::A, args...; kwargs...) where {A<:Union{<:SciMLBase.AbstractLinearAlgorithm,<:QF_LINEARSOLVE}}
     inv_penalty_mat = inv(prob.Q)
     original_lhs_mat = prob.C
     tm = inv_penalty_mat * original_lhs_mat'

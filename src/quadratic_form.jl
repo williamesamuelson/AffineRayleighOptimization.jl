@@ -1,15 +1,15 @@
 """
-    ConstrainedQuadraticFormProblem(Q, C, b)
+    QuadraticProblem(Q, C, b)
 
 A constrained quadratic form problem of the form
     minimize `dot(x,Qx)`
     subject to `Cx = b`.
 """
-struct ConstrainedProblem{Q,C,B}
+struct QuadraticProblem{Q,C,B}
     Q::Q
     C::C
     b::B
-    function ConstrainedProblem(_Q, C, b)
+    function QuadraticProblem(_Q, C, b)
         Q = Hermitian(_Q)
         return new{typeof(Q),typeof(C),typeof(b)}(Q, C, b)
     end
@@ -22,8 +22,6 @@ struct HomogeneousProblem{Q,C}
         return new{typeof(Q),typeof(C)}(Q, C)
     end
 end
-
-const QuadraticProblem = ConstrainedProblem
 
 abstract type QF_ALG end
 struct QF_BACKSLASH <: QF_ALG end
@@ -50,13 +48,13 @@ function solve!(prob::ConstrainedQuadraticFormBackslashSolver)
 end
 
 
-@testitem "QuadraticFormProblem" begin
+@testitem "QuadraticProblem" begin
     using LinearAlgebra, Random
     Random.seed!(1234)
     Q = Diagonal(1:10)
     C = I
     b = rand(10)
-    prob = ConstrainedProblem(Q, C, b)
+    prob = QuadraticProblem(Q, C, b)
     sol = solve(prob)
     @test sol ≈ b
     using LinearSolve

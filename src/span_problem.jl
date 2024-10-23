@@ -1,7 +1,7 @@
 """
     Span(vecs::AbstractMatrix)
 
-Representation of a span, which can be given as `b` in the ConstrainedRayleighQuotientProblem.
+Representation of a span, which can be given as `b` in the ConstrainedProblem.
 The vectors are provided as the columns in vecs.
 """
 struct Span{V<:AbstractMatrix}
@@ -10,7 +10,7 @@ end
 Span(v::AbstractVector) = Span(hcat(v))
 Span(itr...) = Span(reduce(hcat, itr))
 Span(s::Span) = s
-const SpanProblem = ConstrainedProblem{<:Any,<:Any,<:Span}
+const SpanProblem = QuadraticProblem{<:Any,<:Any,<:Span}
 
 @testitem "Span" begin
     b1 = rand(2)
@@ -25,7 +25,7 @@ end
 _get_b(prob::SpanProblem) = _get_b(prob.b)
 _get_b(b::Span) = b.vecs
 
-ConstrainedRayleighQuotientProblem(Q, c, b) = ConstrainedProblem(Q, c, Span(b))
+RayleighProblem(Q, c, b) = QuadraticProblem(Q, c, Span(b))
 
 abstract type SPAN_ALG end
 struct SPAN_CHOL <: SPAN_ALG end
@@ -51,7 +51,7 @@ default_alg(prob::SpanProblem) = size(_get_b(prob), 2) == 1 ? SPAN_CHOL() : SPAN
     using Random
     import AffineRayleighOptimization: SPAN_EIG, SPAN_CHOL
     Random.seed!(1234)
-    prob_span = ConstrainedProblem(rand(2, 2), rand(1, 2), Span(rand(1)))
+    prob_span = QuadraticProblem(rand(2, 2), rand(1, 2), Span(rand(1)))
     # prob_vec = ConstrainedQuadraticFormProblem(rand(2, 2), rand(1, 2), Span(rand(1))
     @test solve(prob_span) ≈ solve(prob_span, SPAN_EIG()) || solve(prob_span) ≈ -solve(prob_span, SPAN_EIG())
     # @test solve(prob_vec) ≈ solve(prob_vec, SPAN_CHOL())
@@ -62,7 +62,7 @@ end
     using Random
     import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_SPARSE, SPAN_HOMO
     Random.seed!(1234)
-    prob = ConstrainedProblem(rand(1, 1), rand(1), Span(rand(1, 2)))
+    prob = QuadraticProblem(rand(1, 1), rand(1), Span(rand(1, 2)))
     for solver in [SPAN_GENEIG(), SPAN_CHOL(), SPAN_SPARSE(), SPAN_HOMO()]
         @test_throws ErrorException solve(prob, solver)
     end
@@ -170,9 +170,9 @@ function _select_vector_index(eigvecs, P)
 end
 
 ## Tests
-@testitem "RayleighQuotientProblem" begin
+@testitem "RayleighProblem" begin
     using LinearAlgebra, Random, SparseArrays
-    import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_EIG, SPAN_SPARSE
+    import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_EIG, SPAN_SPARSE, SPAN_HOMO
     all_solvers = [SPAN_GENEIG(), SPAN_CHOL(), SPAN_EIG(), SPAN_SPARSE()]
     function test_prob_known_sol(prob, known_sol, solvers=all_solvers)
         for solver in solvers
@@ -197,19 +197,19 @@ end
     Q = Diagonal(1:10)
     C = I(10)
     b = rand(10)
-    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
+    prob = RayleighProblem(Q, C, b)
     test_prob_known_sol(prob, b)
     #prob 2 (span)
     b1 = [0.0, 2.0, zeros(8)...]
     b2 = [0.0, 0.0, 1.0, zeros(7)...]
-    prob = ConstrainedRayleighQuotientProblem(Q, C, Span(b1, b2))
+    prob = RayleighProblem(Q, C, Span(b1, b2))
     test_prob_known_sol(prob, b1 / 2, [SPAN_EIG()])
-    prob = ConstrainedRayleighQuotientProblem(Q, C, Span(b2, b1)) # change order
+    prob = RayleighProblem(Q, C, Span(b2, b1)) # change order
     test_prob_known_sol(prob, b1 / 2, [SPAN_EIG()])
     #prob 3
     C = ones(1, 10)
     b = [1.0]
-    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
+    prob = RayleighProblem(Q, C, b)
     test_prob_known_sol(prob, [1.0, zeros(9)...])
     #prob 4 (random matrix)
     n = 20
@@ -217,12 +217,12 @@ end
     Q = Hermitian(rand(n, n))
     C = rand(k, n)
     b = rand(k)
-    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
+    prob = RayleighProblem(Q, C, b)
     test_prob(prob)
     # prob 5 (positive definite matrix)
     M = Hermitian(rand(n, n))
     Q = M'M
-    prob = ConstrainedRayleighQuotientProblem(Q, C, b)
+    prob = RayleighProblem(Q, C, b)
     test_prob(prob)
     # prob 6 (sparse C)
     n = 1000
@@ -239,20 +239,20 @@ end
         return C
     end
     C = generate_sparse_fullrank_C(n, k, 0.01)
-    prob_sparse = ConstrainedRayleighQuotientProblem(Q, C, b)
+    prob_sparse = RayleighProblem(Q, C, b)
     C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob_sparse, SPAN_SPARSE())
     @test C_red_sparse isa SparseMatrixCSC
     sol = solve(prob_sparse, SPAN_SPARSE())
-    prob_dense = ConstrainedRayleighQuotientProblem(Q, Matrix(C), Vector(b))
+    prob_dense = RayleighProblem(Q, Matrix(C), Vector(b))
     test_prob_known_sol(prob_dense, sol)
     # prob 7 (sparse C with pos def Q)
     M = Hermitian(rand(n, n))
     Q = M'M
-    prob_sparse = ConstrainedRayleighQuotientProblem(Q, C, b)
+    prob_sparse = RayleighProblem(Q, C, b)
     # here we need to increase krylov_howmany to find the sol
     @test_throws ErrorException solve(prob_sparse, SPAN_SPARSE())
     sol = solve(prob_sparse, SPAN_SPARSE(krylov_howmany=10))
     Q_dense = Matrix(Q)
-    prob_dense = ConstrainedRayleighQuotientProblem(Q_dense, Matrix(C), Vector(b))
+    prob_dense = RayleighProblem(Q_dense, Matrix(C), Vector(b))
     test_prob_known_sol(prob_dense, sol, [SPAN_CHOL(), SPAN_GENEIG()])
 end
