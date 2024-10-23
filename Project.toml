@@ -1,7 +1,7 @@
 name = "AffineRayleighOptimization"
 uuid = "afc0e0ae-cd0a-41ee-b0f5-7950de095d62"
 authors = ["William Samuelson <william.samuelson@gmail.com> and contributors"]
-version = "1.1.1"
+version = "2.0.0"
 
 [deps]
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
