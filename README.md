@@ -26,9 +26,11 @@ $$\min_x \quad \frac{x^\dagger Q x}{x^\dagger x} \quad \mathrm{s.t.} \quad Cx = 
 
 Solve it by
 ```julia 
-prob = QuadraticProblem(Q, C, Span(b)) 
+prob = QuadraticProblem(Q, C, Span(b_1, b_2,..., b_n)) 
 #or alternatively 
-prob = RayleighProblem(Q, C, b) 
+prob = RayleighProblem(Q, C, [b_1 b_2 ... b_n])
+#or if n = 1
+prob = RayleighProblem(Q, C, b_1)
 solve(prob, alg)
 ```
 where `alg ∈ [SPAN_GENEIG(), SPAN_CHOL(), SPAN_EIG(), SPAN_SPARSE(), SPAN_HOMO()]`
