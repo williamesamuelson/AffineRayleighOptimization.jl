@@ -9,7 +9,7 @@
 
 This package contains solvers for the following optimization problems:
 
-### Linearly Constrained Quadratic Form 
+### Linearly Constrained Quadratic Problem 
 $$\min_x \quad x^\dagger Q x \quad \mathrm{s.t.} \quad Cx = b $$
 
 Solve it by
@@ -19,7 +19,7 @@ solve(prob, alg)
 ```
 where `alg` is `QF_BACKSLASH()` or `QF_LINEARSOLVE(solver)` where `solver` is a linear solver from `LinearAlgebra.jl` package.
 
-### Affinely Constrained Quadratic Quotient 
+### Affinely Constrained Quadratic Problem
 $$\min_x \quad x^\dagger Q x \quad \mathrm{s.t.} \quad Cx = \mathrm{Span}(b_1, ... ,b_n) $$
 If n=1 this problem is equivalent to the Rayleigh Quotient problem 
 $$\min_x \quad \frac{x^\dagger Q x}{x^\dagger x} \quad \mathrm{s.t.} \quad Cx = b $$
