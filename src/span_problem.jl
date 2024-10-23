@@ -52,9 +52,7 @@ default_alg(prob::SpanProblem) = size(_get_b(prob), 2) == 1 ? SPAN_CHOL() : SPAN
     import AffineRayleighOptimization: SPAN_EIG, SPAN_CHOL
     Random.seed!(1234)
     prob_span = QuadraticProblem(rand(2, 2), rand(1, 2), Span(rand(1)))
-    # prob_vec = ConstrainedQuadraticFormProblem(rand(2, 2), rand(1, 2), Span(rand(1))
     @test solve(prob_span) ≈ solve(prob_span, SPAN_EIG()) || solve(prob_span) ≈ -solve(prob_span, SPAN_EIG())
-    # @test solve(prob_vec) ≈ solve(prob_vec, SPAN_CHOL())
 end
 
 
