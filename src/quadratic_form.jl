@@ -17,17 +17,17 @@ end
 
 
 abstract type QF_ALG end
-struct QF_BACKSLASH <: QF_ALG end
+struct QUADRATIC_BACKSLASH <: QF_ALG end
 
 struct ConstrainedQuadraticFormBackslashSolver{L,B,TM}
     lhs::L
     b::B
     transform_matrix::TM
 end
-default_linear_alg(::QuadraticProblem) = QF_BACKSLASH()
+default_linear_alg(::QuadraticProblem) = QUADRATIC_BACKSLASH()
 init(prob::QuadraticProblem) = init(prob, default_linear_alg(prob))
 # https://dept.math.lsa.umich.edu/~speyer/417/Minimization.pdf
-function init(prob::QuadraticProblem, alg::QF_BACKSLASH)
+function init(prob::QuadraticProblem, alg::QUADRATIC_BACKSLASH)
     inv_penalty_mat = inv(prob.Q)
     original_lhs_mat = prob.C
     tm = inv_penalty_mat * original_lhs_mat'
@@ -43,6 +43,7 @@ end
 
 @testitem "QuadraticProblem" begin
     using LinearAlgebra, Random
+    using AffineRayleighOptimization: QUADRATIC_LINEARSOLVE
     Random.seed!(1234)
     Q = Diagonal(1:10)
     C = I
@@ -51,17 +52,17 @@ end
     sol = solve(prob)
     @test sol ≈ b
     using LinearSolve
-    sol = solve(prob, QF_LINEARSOLVE()) #Will use the default solver from LinearSolve
+    sol = solve(prob, QUADRATIC_LINEARSOLVE()) #Will use the default solver from LinearSolve
     @test sol ≈ b
     sol = solve(prob, KrylovJL_MINRES()) #Will use the KrylovJL_MINRES solver from LinearSolve
     @test sol ≈ b
-    sol = solve(prob, QF_LINEARSOLVE(KrylovJL_MINRES())) #Will use the KrylovJL_MINRES solver from LinearSolve
+    sol = solve(prob, QUADRATIC_LINEARSOLVE(KrylovJL_MINRES())) #Will use the KrylovJL_MINRES solver from LinearSolve
     @test sol ≈ b
     sol = solve(prob, KrylovJL_MINRES(); u0=rand(10)) # Set initial guess
     @test sol ≈ b
 end
 
 
-@kwdef struct QF_LINEARSOLVE{A}
+@kwdef struct QUADRATIC_LINEARSOLVE{A}
     alg::A = nothing
 end
