@@ -170,6 +170,7 @@ end
             else
                 @test sol ≈ known_sol
             end
+            test_sol(prob, sol)
         end
     end
     function test_prob(prob, solvers=all_solvers)
@@ -178,7 +179,14 @@ end
             sol = solve(prob, solver)
             push!(sols, sol)
         end
+        map(Base.Fix1(test_sol, prob), sols)
         @test all(x -> x ≈ first(sols), sols[2:end])
+    end
+    _in_span(x, b) = (b * (b \ x) ≈ x)
+    test_sol(prob, sol) = @test if ndims(prob.b) == 1
+        prob.C * sol ≈ prob.b
+    else
+        norm(sol) ≈ 1 && _in_span(prob.C * sol, prob.b)
     end
     Random.seed!(1234)
     #prob 1 (sol=b)
