@@ -1,75 +1,65 @@
-"""
-    Span(vecs::AbstractMatrix)
-
-Representation of a span, which can be given as `b` in the ConstrainedProblem.
-The vectors are provided as the columns in vecs.
-"""
-struct Span{V<:AbstractMatrix}
-    vecs::V
-end
-Span(v::AbstractVector) = Span(hcat(v))
-Span(itr...) = Span(reduce(hcat, itr))
-Span(s::Span) = s
-const SpanProblem = QuadraticProblem{<:Any,<:Any,<:Span}
-
-@testitem "Span" begin
-    b1 = rand(2)
-    b2 = rand(2)
-    bspan = Span(b1, b2)
-    bmatspan = Span(hcat(b1, b2))
-    @test bspan.vecs == bmatspan.vecs
-    @test Span(b1).vecs[:] == b1
-    @test Span(bspan) == bspan
+struct HomogeneousProblem{Q,C}
+    Q::Q
+    C::C
+    function HomogeneousProblem(_Q, C)
+        Q = Hermitian(_Q)
+        return new{typeof(Q),typeof(C)}(Q, C)
+    end
 end
 
-_get_b(prob::SpanProblem) = _get_b(prob.b)
-_get_b(b::Span) = b.vecs
+struct RayleighProblem{Q,C,B}
+    Q::Q
+    C::C
+    b::B
+    function RayleighProblem(_Q, C::CC, b::BB) where {CC,BB}
+        Q = Hermitian(_Q)
+        return new{typeof(Q),CC,BB}(Q, C, b)
+    end
+end
 
-RayleighProblem(Q, c, b) = QuadraticProblem(Q, c, Span(b))
-
-abstract type SPAN_ALG end
-struct SPAN_CHOL <: SPAN_ALG end
-struct SPAN_GENEIG <: SPAN_ALG end
+abstract type RAYLEIGH_ALG end
+struct RAYLEIGH_CHOL <: RAYLEIGH_ALG end
+struct RAYLEIGH_GENEIG <: RAYLEIGH_ALG end
 const DEFAULT_SELECTVEC_EPS = 1e-15
-@kwdef struct SPAN_EIG{T} <: SPAN_ALG
+@kwdef struct RAYLEIGH_EIG{T} <: RAYLEIGH_ALG
     krylov_howmany::Int = 5
     krylov_kwargs::T = (;)
 end
-@kwdef struct SPAN_SPARSE{T} <: SPAN_ALG
+@kwdef struct RAYLEIGH_SPARSE{T} <: RAYLEIGH_ALG
     krylov_howmany::Int = 5
     krylov_kwargs::T = (;)
 end
-@kwdef struct SPAN_HOMO{T} <: SPAN_ALG
+@kwdef struct RAYLEIGH_HOMO{T} <: RAYLEIGH_ALG
     krylov_howmany::Int = 5
     krylov_kwargs::T = (;)
 end
 
-solve(prob::SpanProblem) = solve(prob, default_alg(prob))
-default_alg(prob::SpanProblem) = size(_get_b(prob), 2) == 1 ? SPAN_CHOL() : SPAN_EIG()
+solve(prob::RayleighProblem) = solve(prob, default_alg(prob))
+default_alg(prob::RayleighProblem) = size(prob.b, 2) == 1 ? RAYLEIGH_CHOL() : RAYLEIGH_EIG()
 
 @testitem "Default solvers" begin
     using Random
-    import AffineRayleighOptimization: SPAN_EIG, SPAN_CHOL
+    import AffineRayleighOptimization: RAYLEIGH_EIG, RAYLEIGH_CHOL
     Random.seed!(1234)
-    prob_span = QuadraticProblem(rand(2, 2), rand(1, 2), Span(rand(1)))
-    @test solve(prob_span) ≈ solve(prob_span, SPAN_EIG()) || solve(prob_span) ≈ -solve(prob_span, SPAN_EIG())
+    prob = RayleighProblem(rand(2, 2), rand(1, 2), rand(1))
+    @test solve(prob) ≈ solve(prob, RAYLEIGH_EIG()) || solve(prob) ≈ -solve(prob, RAYLEIGH_EIG())
 end
 
 
 @testitem "Span incompatible" begin
     using Random
-    import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_SPARSE, SPAN_HOMO
+    import AffineRayleighOptimization: RAYLEIGH_GENEIG, RAYLEIGH_CHOL, RAYLEIGH_SPARSE, RAYLEIGH_HOMO
     Random.seed!(1234)
-    prob = QuadraticProblem(rand(1, 1), rand(1), Span(rand(1, 2)))
-    for solver in [SPAN_GENEIG(), SPAN_CHOL(), SPAN_SPARSE(), SPAN_HOMO()]
+    prob = RayleighProblem(rand(1, 1), rand(1), rand(1, 2))
+    for solver in [RAYLEIGH_GENEIG(), RAYLEIGH_CHOL(), RAYLEIGH_SPARSE(), RAYLEIGH_HOMO()]
         @test_throws ErrorException solve(prob, solver)
     end
 end
 
 
-function solve(prob::SpanProblem, alg::SPAN_GENEIG)
-    size(_get_b(prob), 2) == 1 || error("$alg is incompatible with size(b, 2) > 1. Use SPAN_EIG() instead.")
-    augC = hcat(prob.C, -_get_b(prob))
+function solve(prob::RayleighProblem, alg::RAYLEIGH_GENEIG)
+    ndims(prob.b) == 1 || error("$alg is incompatible with ndims(prob.b) != 1. Use RAYLEIGH_EIG() instead.")
+    augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
     Nv = N[end, :]
@@ -80,9 +70,9 @@ function solve(prob::SpanProblem, alg::SPAN_GENEIG)
     return unnormalized_sol / dot(Nv, eigsol)
 end
 
-function solve(prob::SpanProblem, alg::SPAN_CHOL)
-    size(_get_b(prob), 2) == 1 || error("$alg is incompatible with size(b, 2) > 1. Use SPAN_EIG() instead.")
-    augC = hcat(prob.C, -_get_b(prob))
+function solve(prob::RayleighProblem, alg::RAYLEIGH_CHOL)
+    ndims(prob.b) == 1 || error("$alg is incompatible with ndims(prob.b) != 1. Use RAYLEIGH_EIG() instead.")
+    augC = hcat(prob.C, -prob.b)
     N = nullspace(augC)
     Ntrunc = N[1:end-1, :]
     Nv = N[end, :]
@@ -95,11 +85,11 @@ function solve(prob::SpanProblem, alg::SPAN_CHOL)
 end
 
 #https://www.cis.upenn.edu/~jshi/papers/supplement_nips2006.pdf
-function solve(prob::SpanProblem, alg::Union{SPAN_EIG,SPAN_SPARSE}; normalize=size(_get_b(prob), 2) == 1)
-    b = _get_b(prob)
+function solve(prob::RayleighProblem, alg::Union{RAYLEIGH_EIG,RAYLEIGH_SPARSE}; normalize=size(prob.b, 2) == 1)
+    b = prob.b
     C_reduced = _get_C_reduced(prob, alg)
     homo_prob = HomogeneousProblem(prob.Q, C_reduced)
-    sol = solve(homo_prob, SPAN_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
+    sol = solve(homo_prob, RAYLEIGH_HOMO(alg.krylov_howmany, alg.krylov_kwargs))
     if normalize
         t = dot(b, prob.C, sol) / dot(b, b)
         return sol / t
@@ -107,8 +97,8 @@ function solve(prob::SpanProblem, alg::Union{SPAN_EIG,SPAN_SPARSE}; normalize=si
     return sol
 end
 
-function _get_C_reduced(prob::SpanProblem, alg::SPAN_EIG)
-    b = _get_b(prob) # fetch b matrix/vector if prob.b is span/vector
+function _get_C_reduced(prob::RayleighProblem, alg::RAYLEIGH_EIG)
+    b = prob.b # fetch b matrix/vector if prob.b is span/vector
     C = prob.C
     N = size(b, 1)
     Kb = I - b * b' / dot(b, b)
@@ -116,9 +106,9 @@ function _get_C_reduced(prob::SpanProblem, alg::SPAN_EIG)
     return (Kb*C)[inds_keep, :] # instead of J * Kb * C where J = I(N)[inds_keep, :]
 end
 
-function _get_C_reduced(prob::SpanProblem, alg::SPAN_SPARSE)
-    size(_get_b(prob), 2) == 1 || error("$alg is incompatible with size(b, 2) > 1. Use SPAN_EIG() instead.")
-    b = _get_b(prob)
+function _get_C_reduced(prob::RayleighProblem, alg::RAYLEIGH_SPARSE)
+    ndims(prob.b) == 1 || error("$alg is incompatible with ndims(prob.b) != 1. Use RAYLEIGH_EIG() instead.")
+    b = prob.b
     C = prob.C
     inds_remove, inds_keep = _inds_to_remove_and_keep(b, length(b))
     ind_remove = only(inds_remove) # only one element, no support for b Span
@@ -133,11 +123,11 @@ function _inds_to_remove_and_keep(b, N)
     return inds_remove, inds_keep
 end
 
-function solve(prob::SpanProblem, alg::SPAN_HOMO)
-    iszero(_get_b(prob)) || error("b must be zero to use the algorithm SPAN_HOMO")
-    solve(HomogeneousProblem(prob.Q, prob.C), SPAN_HOMO())
+function solve(prob::RayleighProblem, alg::RAYLEIGH_HOMO)
+    iszero(prob.b) || error("b must be zero to use the algorithm RAYLEIGH_HOMO")
+    solve(HomogeneousProblem(prob.Q, prob.C), RAYLEIGH_HOMO())
 end
-function solve(prob::HomogeneousProblem, alg::SPAN_HOMO)
+function solve(prob::HomogeneousProblem, alg::RAYLEIGH_HOMO)
     C = prob.C
     P, PQP = _get_P_PQP_homo(C, prob.Q)
     howmany = 1
@@ -170,12 +160,12 @@ end
 ## Tests
 @testitem "RayleighProblem" begin
     using LinearAlgebra, Random, SparseArrays
-    import AffineRayleighOptimization: SPAN_GENEIG, SPAN_CHOL, SPAN_EIG, SPAN_SPARSE, SPAN_HOMO
-    all_solvers = [SPAN_GENEIG(), SPAN_CHOL(), SPAN_EIG(), SPAN_SPARSE()]
+    import AffineRayleighOptimization: RAYLEIGH_GENEIG, RAYLEIGH_CHOL, RAYLEIGH_EIG, RAYLEIGH_SPARSE, RAYLEIGH_HOMO
+    all_solvers = [RAYLEIGH_GENEIG(), RAYLEIGH_CHOL(), RAYLEIGH_EIG(), RAYLEIGH_SPARSE()]
     function test_prob_known_sol(prob, known_sol, solvers=all_solvers)
         for solver in solvers
             sol = solve(prob, solver)
-            if prob.b isa Span
+            if ndims(prob.b) == 2
                 @test (sol ≈ known_sol) || (sol ≈ -known_sol) # sign undetermined if b Span?
             else
                 @test sol ≈ known_sol
@@ -200,10 +190,10 @@ end
     #prob 2 (span)
     b1 = [0.0, 2.0, zeros(8)...]
     b2 = [0.0, 0.0, 1.0, zeros(7)...]
-    prob = RayleighProblem(Q, C, Span(b1, b2))
-    test_prob_known_sol(prob, b1 / 2, [SPAN_EIG()])
-    prob = RayleighProblem(Q, C, Span(b2, b1)) # change order
-    test_prob_known_sol(prob, b1 / 2, [SPAN_EIG()])
+    prob = RayleighProblem(Q, C, [b1 b2])
+    test_prob_known_sol(prob, b1 / 2, [RAYLEIGH_EIG()])
+    prob = RayleighProblem(Q, C, [b2 b1]) # change order
+    test_prob_known_sol(prob, b1 / 2, [RAYLEIGH_EIG()])
     #prob 3
     C = ones(1, 10)
     b = [1.0]
@@ -238,9 +228,9 @@ end
     end
     C = generate_sparse_fullrank_C(n, k, 0.01)
     prob_sparse = RayleighProblem(Q, C, b)
-    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob_sparse, SPAN_SPARSE())
+    C_red_sparse = AffineRayleighOptimization._get_C_reduced(prob_sparse, RAYLEIGH_SPARSE())
     @test C_red_sparse isa SparseMatrixCSC
-    sol = solve(prob_sparse, SPAN_SPARSE())
+    sol = solve(prob_sparse, RAYLEIGH_SPARSE())
     prob_dense = RayleighProblem(Q, Matrix(C), Vector(b))
     test_prob_known_sol(prob_dense, sol)
     # prob 7 (sparse C with pos def Q)
@@ -248,9 +238,9 @@ end
     Q = M'M
     prob_sparse = RayleighProblem(Q, C, b)
     # here we need to increase krylov_howmany to find the sol
-    @test_throws ErrorException solve(prob_sparse, SPAN_SPARSE())
-    sol = solve(prob_sparse, SPAN_SPARSE(krylov_howmany=10))
+    @test_throws ErrorException solve(prob_sparse, RAYLEIGH_SPARSE())
+    sol = solve(prob_sparse, RAYLEIGH_SPARSE(krylov_howmany=10))
     Q_dense = Matrix(Q)
     prob_dense = RayleighProblem(Q_dense, Matrix(C), Vector(b))
-    test_prob_known_sol(prob_dense, sol, [SPAN_CHOL(), SPAN_GENEIG()])
+    test_prob_known_sol(prob_dense, sol, [RAYLEIGH_CHOL(), RAYLEIGH_GENEIG()])
 end

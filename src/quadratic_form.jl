@@ -14,14 +14,7 @@ struct QuadraticProblem{Q,C,B}
         return new{typeof(Q),typeof(C),typeof(b)}(Q, C, b)
     end
 end
-struct HomogeneousProblem{Q,C}
-    Q::Q
-    C::C
-    function HomogeneousProblem(_Q, C)
-        Q = Hermitian(_Q)
-        return new{typeof(Q),typeof(C)}(Q, C)
-    end
-end
+
 
 abstract type QF_ALG end
 struct QF_BACKSLASH <: QF_ALG end
@@ -31,7 +24,7 @@ struct ConstrainedQuadraticFormBackslashSolver{L,B,TM}
     b::B
     transform_matrix::TM
 end
-default_linear_alg(prob::QuadraticProblem) = QF_BACKSLASH()
+default_linear_alg(::QuadraticProblem) = QF_BACKSLASH()
 init(prob::QuadraticProblem) = init(prob, default_linear_alg(prob))
 # https://dept.math.lsa.umich.edu/~speyer/417/Minimization.pdf
 function init(prob::QuadraticProblem, alg::QF_BACKSLASH)

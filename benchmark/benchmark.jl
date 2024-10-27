@@ -1,5 +1,5 @@
 using AffineRayleighOptimization, LinearAlgebra, SparseArrays
-import AffineRayleighOptimization: SPAN_EIG, SPAN_SPARSE, SPAN_GENEIG, SPAN_CHOL
+import AffineRayleighOptimization: RAYLEIGH_EIG, RAYLEIGH_SPARSE, RAYLEIGH_GENEIG, RAYLEIGH_CHOL
 using BenchmarkTools, ProfileView, Plots
 
 function generate_sparse_mats(sparsity, n, k, maxit=1e4)
@@ -20,15 +20,15 @@ function generate_sparse_fullrank_C(n, k, sparsity, maxit=1e4)
 end
 
 function get_combinations()
-    combs = collect(Base.product((:sparse, :dense), (SPAN_SPARSE(), SPAN_EIG()))) |> vec
-    return vcat(combs, vec(collect(Base.product((:dense,), (SPAN_CHOL(), SPAN_GENEIG())))))
+    combs = collect(Base.product((:sparse, :dense), (RAYLEIGH_SPARSE(), RAYLEIGH_EIG()))) |> vec
+    return vcat(combs, vec(collect(Base.product((:dense,), (RAYLEIGH_CHOL(), RAYLEIGH_GENEIG())))))
 end
 
 # remember to run first once to compile
 function run_benchmark(sparsity, n, k)
     @time rc, C, b = generate_sparse_mats(sparsity, n, k)
-    prob_sparse = ConstrainedQuadraticFormProblem(rc, C, Span(b))
-    prob_dense = ConstrainedQuadraticFormProblem(Matrix(Q), Matrix(C), Span(Vector(b)))
+    prob_sparse = RayleighProblem(rc, C, b)
+    prob_dense = RayleighProblem(Matrix(Q), Matrix(C), Vector(b))
     combs = get_combinations()
     times = zeros(length(combs))
     for (j, (prob, solver)) in enumerate(combs)
@@ -66,7 +66,7 @@ end
 
 pls = []
 display(get_combinations())
-legend = ["SPAN_SPARSE (s)" "SPAN_SPARSE (d)" "SPAN_EIG (s)" "SPAN_EIG (d)" "SPAN_CHOL" "SPAN_GENEIG"]
+legend = ["RAYLEIGH_SPARSE (s)" "RAYLEIGH_SPARSE (d)" "RAYLEIGH_EIG (s)" "RAYLEIGH_EIG (d)" "RAYLEIGH_CHOL" "RAYLEIGH_GENEIG"]
 for i in eachindex(sparsities)
     if i ≠ 1
         legend = false
