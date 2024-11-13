@@ -1,0 +1,3 @@
+[deps]
+AffineRayleighOptimization = "afc0e0ae-cd0a-41ee-b0f5-7950de095d62"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
