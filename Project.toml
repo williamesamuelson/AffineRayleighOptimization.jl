@@ -19,7 +19,7 @@ AffineRayleighOptimizationLinearSolveExt = "LinearSolve"
 [compat]
 Aqua = "0.8"
 JET = "0.9"
-KrylovKit = "0.8"
+KrylovKit = "0.9"
 LinearAlgebra = "1"
 LinearMaps = "3"
 LinearSolve = "2"
